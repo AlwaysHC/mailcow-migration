@@ -9,6 +9,7 @@ from .core.state import Workspace
 from .plans.saved import load_saved_plan
 from .sources.delivery import HOLD, SourceDelivery
 from .sources.logins import SourceLogins
+from .sources.roundcube import roundcube_sessions
 
 
 def run_source_delivery(configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False) -> int:
@@ -21,22 +22,26 @@ def run_source_delivery(configuration: Configuration, file: Path, *, action: str
         if action != "check":
             require_before_activation(account_journal(batch, configuration).read())
         delivery = SourceDelivery(batch, configuration.mailcow.api)
+        sessions = roundcube_sessions(batch, configuration)
         if action == "check":
             if batch.plan["mailboxes"]:
                 SourceLogins(batch).check()
             delivery.check()
-            print("Source delivery holds, recipient routing, queued envelopes and detected writers passed checks.")
+            sessions.check()
+            print("Source delivery, recipient routing, queued envelopes, detected writers and RoundCube sessions passed checks.")
         else:
             findings = batch.blocking_findings
             if findings and action == "pause":
                 raise MigrationError("Resolve saved planning findings before pausing source delivery:\n" + findings)
             snapshot = delivery.inspect()
+            webmail_sessions = sessions.preflight(require_drafts=action == "pause")
             if action == "preview":
                 request = delivery.routing_request
                 held = sum(snapshot.transport["entries"].get(key) == HOLD for key in delivery.keys)
                 print("Source: {}; {} of {} batch transport keys already held.".format(batch.source.ssh.host, held, len(delivery.keys)))
                 print("Would preserve {} recipient addresses and catch-all behavior: {}.".format(len(request["recipients"]), request["catchAll"]))
                 print("Would filter {} BCC maps, defer delivery and drain old Postfix workers.".format(len(snapshot.routing["bccMaps"])))
+                print("Would revoke {} RoundCube sessions after delivery holds are installed.".format(sum(webmail_sessions.values())))
                 print("Queued recipients are checked after recipient mappings are isolated; this preview does not establish queue safety.")
                 print("Delivery holds remain until guarded handoff; automatic release is not available in this snapshot.")
                 if findings:
@@ -46,6 +51,7 @@ def run_source_delivery(configuration: Configuration, file: Path, *, action: str
                 if batch.plan["mailboxes"]:
                     SourceLogins(batch).check()
                 delivery.pause(snapshot)
+                sessions.revoke()
                 print("Source delivery pause completed. Holds remain until the guarded handoff workflow is available and completed.")
-        print("RoundCube session revocation and complete submission isolation remain pending. Full source isolation is not established.")
+        print("Webmail import, combined submission checks and complete migration readiness remain pending.")
     return 0

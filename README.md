@@ -4,6 +4,7 @@ A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to
 
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
+RoundCube source snapshots, session previews and guarded session revocation are also available.
 Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -18,7 +19,8 @@ This snapshot has not been validated end to end.
 | `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
 | `target-isolation` | Preview, pause and check Mailcow access, delivery and writers for a staged batch; retain guarded restoration state. |
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
-| `source-delivery` | Preview, pause and check PostfixAdmin delivery and recipient expansion, with queue safeguards and recovery records. |
+| `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
+| `roundcube-sessions` | Save a private source snapshot and session preview; revoke/check batch sessions after source isolation. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -134,7 +136,7 @@ Export completion means the evidence was collected, not that it can be migrated.
 Account mapping, quota calculation and initial target checks are available through `plan`; full migration assessment remains pending.
 The inventory recheck does not establish that every source setting stayed unchanged throughout the export.
 Accounts, messages, mail-service configuration and Mailcow are
-not modified. RoundCube export, shared-server preparation and migration-resume support remain planned work.
+not modified. RoundCube snapshots are collected separately by `roundcube-sessions`; shared-server preparation and full migration resume remain pending.
 
 ## Account planning
 
@@ -266,6 +268,53 @@ sender permissions or delivery. Full source isolation, message copying, activati
 these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
 
+## RoundCube snapshots and sessions
+
+Preview webmail data and session ownership before freezing source logins:
+
+```bash
+mailcow-migrate roundcube-sessions --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+The installation path comes from the selected source configuration. If it was left unset, add `--directory /path/on/source`
+to this first preview. The chosen path is then pinned to the batch; subsequent commands reuse it without changing the saved
+configuration. The source needs RoundCube 1.6.x, PHP CLI 7.3+ with `pdo_mysql`, supported MySQL configuration and InnoDB user-data
+tables. The exporter runs as a private temporary PHP file over SSH and removes that file afterward. Unsupported configurations,
+plugins, address-book storage, session storage or session ownership stop the operation.
+
+Preview leaves source data and sessions unchanged. It saves a consistent snapshot of selected profiles, contacts, identities,
+preferences and other persistent records, plus ignored-profile metadata and session counts. For duplicate profiles it selects
+the latest login, breaking ties by highest user ID; profiles without a batch mailbox are reported and left on the source.
+Stored files are counted and fingerprinted, not downloaded. Unknown tables, shared dictionary data, groups, saved responses,
+dictionaries, searches and stored files retain their preservation blockers. Contact/preference conversion and the complete
+SOGo assessment remain pending; a snapshot is not an import-ready plan.
+
+Ask every migrating user to recover browser-only drafts in every browser/profile, save them in server Drafts, verify they
+reopen, and close the clients. Repeat preview with `--drafts-saved` to record that confirmation. The script cannot inspect
+browser local storage. Source login freeze and delivery pause require this confirmation and an unchanged source snapshot;
+keep user edits and account administration frozen afterward. Login release remains available when these preflights fail.
+
+The PostfixAdmin sequence is now RoundCube preview/draft confirmation, source login freeze, then source delivery pause.
+`source-delivery --action pause --apply` installs and verifies delivery holds before revoking RoundCube sessions. It includes
+all profiles belonging to batch mailboxes, including duplicate and alias-domain logins, while retaining unrelated sessions.
+The helper matches decoded ownership and deletes each session only if both its ID and stored serialized value still match;
+changed sessions stop the operation. It then checks for zero remaining batch sessions and rereads the persistent snapshot.
+
+`roundcube-sessions --action revoke --apply` can resume this session step separately after the same live login and delivery
+checks. `--action check` verifies completed revocation without changing sessions. Plesk currently supports preview only;
+revocation requires its pending source-isolation adapter. No operation changes contacts, identities or preferences on the source,
+imports data into SOGo, copies mail or activates accounts.
+
+Private evidence lives under `roundcube-sessions` in the batch directory. Its journal records the source, target, plan,
+installation, baseline snapshot, draft confirmation and each attempt's before/removed/after counts. Snapshots are retained
+by fingerprint, including changed snapshots found during verification. An interrupted revocation may already have committed;
+resume against the same baseline after restoring the required isolation. Preview cannot replace an unfinished operation's
+baseline, and persistent-data drift requires reconciliation. Invalid exporter output is retained privately for diagnosis.
+
+Session completion is distinct from webmail-import completion: this journal retains `import_complete: false` and
+`source_isolated: false`, and cannot satisfy Mailcow's webmail-import release guard. Full conversion/import, combined submission
+checks and migration readiness remain pending.
+
 ## PostfixAdmin source logins
 
 Preview the login-control step using the saved plan and configuration:
@@ -283,7 +332,8 @@ which remains pending; an alias-only batch with no mailbox logins needs no login
 
 After users have saved drafts and closed clients, `--action freeze --apply` excludes exactly the planned mailbox usernames,
 reloads Dovecot, clears their authentication caches and disconnects their sessions. Before changing logins, it checks the
-delivery prerequisites described below; delivery blockers stop freeze, while login release remains available.
+delivery prerequisites described below and the saved RoundCube snapshot/session preview with draft confirmation.
+These blockers stop freeze, while login release remains available.
 Each account must produce the expected
 absent-entry authentication result, and session checks must show no remaining connections. Unexpected command failures stop
 the operation; a shared Dovecot process is never forcibly killed to disconnect one batch. Passwords and mailbox activity flags
@@ -303,8 +353,8 @@ It remains available when unrelated saved planning findings block freeze. Freeze
 activation or an uncertain target write. Release leaves separate delivery holds and Mailcow staging in place and moves no mail;
 review those holds before returning users to the source. Do not restore an entire SQL configuration over later batches' changes.
 
-This command implements login control only. Delivery controls are a separate step. Complete submission isolation, RoundCube
-session revocation and the combined source-isolation workflow remain pending; a successful login freeze does not establish
+This command implements login control only. Delivery controls and RoundCube session revocation are separate steps.
+Complete submission checks and the combined migration workflow remain pending; a successful login freeze does not establish
 full source isolation or migration readiness.
 
 ## PostfixAdmin source delivery
@@ -316,6 +366,7 @@ mailcow-migrate source-delivery --config migration.json --plan /root/mailcow-in-
 ```
 
 The default `preview` action reads source routing, BCC maps, configuration ownership and directly referenced mail-sync cron jobs.
+It also requires and rechecks the saved RoundCube snapshot and session preview.
 It requires one primary domain, supported hash BCC maps, the retry/error transport, regexp maps, and an empty or `+` recipient
 delimiter. Linked domains, conflicting routes, service-specific overrides, global `always_bcc`, changed managed files and
 unsupported map types stop the operation. The same routing preflight now runs before a source login freeze.
@@ -329,6 +380,7 @@ The next stage preserves accepted recipient addresses and catch-all behavior thr
 domain's source alias/vacation expansion. It uses filtered copies of supported BCC maps, preserving originals and other domains'
 entries. Delivery stays deferred while mappings are installed, workers drain and queued envelopes are checked. Mailbox and
 domain route lookups, accepted/unknown-recipient behavior, detected scheduled jobs and open writable mailbox files must verify.
+The command then revokes batch RoundCube sessions and verifies their absence and the unchanged persistent user-data snapshot.
 These checks cannot discover every writer hidden behind a custom script; source account administration and custom batch imports
 must remain paused separately.
 
@@ -343,12 +395,14 @@ The private local `source-delivery.json` journal binds operation stages and back
 Source configuration backups remain under `/root/mailcow-in-progress/delivery-backups`; source routing and queue-history records
 are retained with the managed maps. File/configuration fingerprints, source locks and readback protect each update. An interrupted
 pause can leave holds or mappings installed; retain all records and rerun the same command after resolving the reported blocker.
-`--action check` verifies a completed delivery pause and its login freeze without changing services or queue scheduling.
+`--action check` verifies a completed delivery pause, its login freeze and the separate RoundCube session receipt without
+changing services or queue scheduling.
 
 This snapshot provides no delivery-release command. Holds remain until guarded handoff is implemented and completed; releasing
 source logins alone does not remove them. The delivery journal explicitly records `source_isolated: false` and
-`webmail_sessions_verified: false`. RoundCube session revocation, complete submission isolation and combined source readiness
-remain pending, so this command does not authorize copying, activation or cutover. Plesk retains its separate pending adapter.
+`webmail_sessions_verified: false`; session verification is recorded separately in the RoundCube session journal.
+Webmail import, complete submission checks and combined source readiness remain pending, so this command does not authorize
+copying, activation or cutover. Plesk retains its separate pending adapter.
 
 ## Target isolation
 
@@ -397,6 +451,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `isolation`, `targets.isolation`, `targets.writers` | Target access/delivery isolation, writer checks, recovery journals and guarded restoration. |
 | `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
+| `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |

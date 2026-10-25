@@ -9,6 +9,7 @@ from .core.state import Workspace
 from .plans.saved import load_saved_plan
 from .sources.delivery import SourceDelivery
 from .sources.logins import SourceLogins, login_query
+from .sources.roundcube import roundcube_sessions
 
 
 def run_source_logins(configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False) -> int:
@@ -34,6 +35,7 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
             if action == "freeze":
                 print("Checking source delivery prerequisites before changing logins...")
                 SourceDelivery(batch, configuration.mailcow.api).inspect()
+                roundcube_sessions(batch, configuration).preflight()
             snapshot = logins.inspect()
             if action == "preview":
                 _, blocked = login_query(snapshot.query, logins.users, freeze=True)

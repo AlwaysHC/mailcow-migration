@@ -106,10 +106,13 @@ Configuration generation is available in the current development version.
   Target timezone agreement, import and verification remain pending. Prior autoresponder reply history is not transferred.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
+  Source snapshots, selected/ignored-profile inventories and file fingerprints are available; full conversion/import remains pending.
 - [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
   Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
-- [ ] **Preserve:** Identify and revoke source RoundCube sessions for the batch after source isolation.
-  Support separately journaled target isolation for missing webmail imports on an already activated batch.
+- [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.
+  Preserve exact session ownership/value checks, draft confirmation, zero-session readback and unchanged user-data snapshots.
+  Retain separate receipts and evidence; Plesk preview is available, while its revocation adapter remains pending.
+- [ ] Support separately journaled target isolation for missing webmail imports on an already activated batch.
 
 ## Server preparation and handoff
 
@@ -131,7 +134,8 @@ Configuration generation is available in the current development version.
   Preserve other domains and original BCC maps, retain filtered copies/backups, drain workers and verify queue envelopes and detected writers.
   Record queue-history evidence and block ambiguous prior expansion, original-recipient history, BCC copies and administrative holds.
   Keep the global original-recipient setting and queue scheduling unchanged; do not delete or globally requeue messages.
-  Full source submission isolation, RoundCube session revocation, guarded handoff and the separate Plesk adapter remain pending.
+  RoundCube session revocation and its own verification run after delivery holds; full source submission checks,
+  guarded handoff and the separate Plesk adapter remain pending.
 - [x] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
   Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
