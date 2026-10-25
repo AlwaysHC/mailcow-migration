@@ -75,10 +75,10 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--reviewed", action="store_true", help="Confirm review of the previously saved, unchanged SOGo proposal")
             command.add_argument("--accept-deferrals", action="store_true", help="Explicitly defer the listed receipt/reply-folder preferences")
         if name == "sogo-target":
-            command.add_argument("--action", choices=("preview", "configure", "check", "inspect-users"), default="preview",
-                                 help="Defaults to configuration preview; inspect-users checks native data conflicts and target folder state")
+            command.add_argument("--action", choices=("preview", "configure", "check", "inspect-users", "prepare-users"), default="preview",
+                                 help="Defaults to preview; prepare-users refreshes missing sources and cached unknown users before native checks")
             command.add_argument("--apply", action="store_true",
-                                 help="Apply the previewed shared identity setting and restart SOGo; briefly interrupts all webmail/DAV domains")
+                                 help="Required for configure or prepare-users; a SOGo restart briefly interrupts webmail/DAV for all domains")
     return result
 
 

@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from uuid import uuid4
 
 from .sogo import SogoTarget, configuration_blockers, missing_custom_from, missing_user_sources
 from .sogo_folders import inspect_folder_state
@@ -164,31 +165,56 @@ class SogoPreparation:
             raise MigrationError("Resume the pending SOGo configuration/restart before source isolation or user-data inspection")
         return self.target.preflight(self.users)
 
-    def inspect_users(self) -> bool:
+    def inspect_users(self, *, prepare: bool = False) -> bool:
         config = self.preflight()
-        missing = missing_user_sources(self.users, config)
-        if missing:
-            raise MigrationError("SOGo user sources are not loaded for: " + ", ".join(missing)
-                                 + ". Finish account activation and reconcile source loading before inspecting user data")
         results = []
+        context = {"version": 1, **self.identity, "proposal_sha256": json_fingerprint(self.proposal, canonical=True), "import_ready": False}
+        attempt = self.file("user-preparation-" + uuid4().hex + ".json") if prepare and self.users else None
+
+        def save_preparation(phase: str, **details: Any) -> None:
+            if attempt is not None:
+                write_private_json(attempt, {**context, "kind": "sogo-user-preparation", "phase": phase, "users": results, **details}, replace=True)
+
+        if attempt is not None:
+            save_preparation("started")
+            print("Private SOGo user-preparation record: {}".format(attempt))
+        missing = missing_user_sources(self.users, config)
+        if missing and prepare:
+            save_preparation("restart-pending", missing_user_sources=missing)
+            print("SOGo user sources are missing for: " + ", ".join(missing))
+            self.target.restart()
+            config = self.preflight()
+            missing = missing_user_sources(self.users, config)
+        if missing:
+            save_preparation("blocked", missing_user_sources=missing)
+            raise MigrationError("SOGo user sources are not loaded for: " + ", ".join(missing)
+                                 + (". If startup is still running, retry when it finishes; otherwise inspect startup logs and domain overrides. "
+                                    "Inactive staging alone does not establish valid user sources." if prepare
+                                    else ". Use prepare-users --apply to refresh sources when a shared SOGo restart is acceptable. "
+                                    "Account activation remains a separate prerequisite."))
         for user in self.users:
+            cache = None
             try:
+                if prepare:
+                    save_preparation("lookup-pending", username=user["username"])
+                    cache = self.target.clear_unknown_user(user["username"])
+                    save_preparation("backup-pending", username=user["username"], cache=cache)
                 backup = self.target.backup(user["username"])
                 current = check_preferences(backup, user, self.target.directory)
                 check_book(backup, user["username"], user["book"], user["records"], owned=False)
                 folders = inspect_folder_state(self.target.target, self.target.directory, user, backup)
-                results.append({"username": user["username"], "status": "verified",
+                results.append({"username": user["username"], "status": "verified", "cache": cache,
                                 "preferences_missing": [key for key in user["preferences"] if key not in current], "folder_state": folders})
                 print(user["username"] + ": existing preferences, destination address book and applicable folder state passed checks.")
             except MigrationError as error:
-                results.append({"username": user["username"], "status": "blocked", "detail": str(error)})
+                results.append({"username": user["username"], "status": "blocked", "cache": cache, "detail": str(error)})
                 print(user["username"] + ": " + str(error))
+            save_preparation("checking-users")
         verified = all(row["status"] == "verified" for row in results)
-        report = {"version": 1, "kind": "sogo-user-assessment", **self.identity,
-                  "proposal_sha256": json_fingerprint(self.proposal, canonical=True), "users": results,
-                  "import_ready": False, "target_folder_verification": verified,
+        report = {**context, "kind": "sogo-user-assessment", "users": results, "target_folder_verification": verified,
                   "folder_users_checked": sum(row.get("folder_state") is not None for row in results)}
         write_private_json(self.file("user-assessment.json"), report, replace=True)
+        save_preparation("complete" if verified else "blocked")
         print("Private user assessment: {}. No user preferences or address books were changed.".format(self.file("user-assessment.json")))
         print("Folder settings are proposed only; user-data import and final readback remain pending.")
         return verified

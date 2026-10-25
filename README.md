@@ -6,6 +6,7 @@ A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
 SOGo target preparation can check/configure custom identity support, inspect existing user-data conflicts and assess target folder display state.
+An explicit user-preparation action can refresh missing SOGo user sources and reconcile cached unknown-user lookups.
 Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -22,7 +23,7 @@ This snapshot has not been validated end to end.
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
-| `sogo-target` | Preview/apply required identity configuration, check effective settings, and inspect native data/folder-state conflicts. |
+| `sogo-target` | Prepare identity settings/user lookups, check effective settings, and inspect native data/folder-state conflicts. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -377,6 +378,27 @@ Backups, previews and diagnostics are private under `sogo-target` in the batch d
 checks, and refuse an unfinished SOGo configuration/restart. Source login release remains available if target preparation fails.
 This configuration step does not import identities, preferences or contacts.
 
+When domain user sources need loading or SOGo has cached an unknown user, run:
+
+```bash
+mailcow-migrate sogo-target --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --action prepare-users --apply
+```
+
+This action requires the reviewed source snapshot/folder trees to remain unchanged, no uncertain account request, and completed
+SOGo configuration preparation. If selected domains lack effective user sources, it restarts `sogo-mailcow`, waits for its
+listener and rechecks the sources and required settings. **The restart briefly interrupts webmail/DAV for all domains.**
+Already loaded user sources need no restart. This does not activate staged accounts; if sources remain missing, inspect the
+startup logs, domain activation and domain overrides before retrying.
+
+Before each native backup, it checks the selected mailbox's `username+attributes` Memcached entry through `php-fpm-mailcow`.
+Only a string whose trimmed value is exactly `null` is deleted. Other values and other cache keys are retained. Cache errors
+stop that user's preparation. A fresh backup must then pass the same preference, address-book and folder-state checks as
+`inspect-users`; clearing a cached lookup alone does not establish readiness.
+
+Each run retains a private attempt record before restarting or checking cache entries, with per-user outcomes and any unfinished
+step. A retry checks live sources and cache values again; it does not rely on an earlier success or overwrite earlier attempt
+records. The first native backups and diagnostics remain available. Preparation does not import data or authorize target release.
+
 `--action inspect-users` rechecks the approved source snapshot and source folder trees, then reads native SOGo backups as the
 `sogo` user once the domain's user sources are available. The first
 private backup for each user is retained. Failed native operations retain their private temporary directory inside the container
@@ -396,9 +418,9 @@ It does not create folders or establish that messages have been transferred. Rec
 under isolation before a future import; this assessment is not an import receipt.
 
 An existing destination address book without this application's import journal is a conflict, even if its contents appear to
-match. Native inspection never adopts that book or overwrites conflicting data. Missing user sources or failed user lookups
-are reported; source refresh/cache reconciliation remains part of the pending import workflow. Configuration/user assessments
-retain `import_ready: false`; actual SOGo imports, final readback and activation remain pending.
+match. Native inspection never adopts that book or overwrites conflicting data. Read-only inspection reports missing user
+sources or failed lookups; the separate `prepare-users --apply` action can refresh sources and reconcile unknown-user caches.
+Configuration/user assessments retain `import_ready: false`; actual SOGo imports, final readback and activation remain pending.
 
 ## PostfixAdmin source logins
 
@@ -538,7 +560,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
-| `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration, native backups and data/folder conflict inspection. |
+| `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

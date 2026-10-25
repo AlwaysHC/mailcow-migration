@@ -10,6 +10,7 @@ Configuration, source inspection, private domain exports, planning and inactive 
 Target isolation and PostfixAdmin login and delivery controls are available separately.
 RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
 SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
+Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -131,7 +132,14 @@ and mail-volume access, and Docker Compose v2. Verify `MAILDIR_SUB=Maildir`, vma
 permission to restart SOGo and `nc` in the container for its startup check. Native user inspection needs loaded SOGo user sources
 and working per-user backups; inactive staging alone does not prove those prerequisites. Property-list output uses the supported
 GNUstep representation, including Unicode escapes, and is parsed before applying a proposed configuration change.
-No preview or native inspection clears cached user lookups, refreshes sources, imports user data or grants address-book ownership.
+The `preview` and `inspect-users` actions do not clear cached user lookups, refresh sources, import user data or grant address-book ownership.
+
+`sogo-target --action prepare-users --apply` additionally requires PHP CLI with `JSON_THROW_ON_ERROR` and the `Memcached`
+extension in `php-fpm-mailcow`, plus a nonempty effective `SOGoMemcachedHost`. The helper accepts comma-separated hosts with
+optional ports, defaulting to 11211, and rejects unsupported URL components. It deletes only selected `username+attributes`
+entries whose string value trims to `null`; cache failures remain visible. Missing user sources trigger the shared SOGo
+restart/startup check, so restart permission and `nc` are also required. Domain activation and valid source definitions must
+already allow these users to resolve. Preparation retains private attempt records and finishes with native conflict checks.
 
 Native user inspection rechecks the saved RoundCube snapshot and source folder trees through the configured SSH/PHP connection.
 For profiles with folder display state, it also requires `doveadm`, `doveconf` and, when deriving an unset separator, `dovecot`

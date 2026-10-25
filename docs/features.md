@@ -118,6 +118,9 @@ Configuration generation is available in the current development version.
 - [x] Inspect existing SOGo preferences and destination address books through native backups without changing user data.
   Preserve exact conflict/ownership checks and the first private backup; missing user sources and failed lookups block inspection.
   Native inspection does not authorize writes, refresh sources, clear cached user records or mark import complete.
+- [x] Explicitly prepare SOGo user lookups before native checks, restarting only for missing effective user sources.
+  Explain the shared webmail/DAV interruption and recheck settings after startup. Preserve the targeted cached-null deletion rule,
+  private attempt records and fresh native verification; keep activation and user-data import separate.
 - [x] Recheck source snapshots/folder trees and assess target folder display state during native user inspection.
   Require every source folder on the target, preserve SOGo identifier escaping and the collapsed/expanded mapping,
   and block conflicting primary-account selections while retaining unrelated Mail settings and other account identifiers.

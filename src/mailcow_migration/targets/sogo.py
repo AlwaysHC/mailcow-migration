@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,6 +10,12 @@ from .sogo_values import configuration_value, enabled
 from ..core.errors import MigrationError
 from ..core.storage import decode_json, json_fingerprint, local_path, read_text, write_private_text
 from ..plans.roundcube_values import source_truth
+from ..resources import php_resource
+
+
+def require_username(username: str) -> None:
+    if not re.fullmatch(r"[a-zA-Z0-9_.+%-]+@[a-zA-Z0-9.-]+", username):
+        raise MigrationError("SOGo operations require a literal mailbox username")
 
 
 def user_domains(users: Sequence[Mapping[str, Any]]) -> list:
@@ -111,8 +118,7 @@ class SogoTarget:
                       '"SOGo startup timed out after 60 seconds; inspect its startup log." >&2; exit 1; fi; sleep 2; done'))
 
     def backup(self, username: str) -> Mapping[str, Any]:
-        if not re.fullmatch(r"[a-zA-Z0-9_.+%-]+@[a-zA-Z0-9.-]+", username):
-            raise MigrationError("SOGo backup requires a literal mailbox username")
+        require_username(username)
         folder = self.command(("mktemp", "-d", "/tmp/mailcow-contacts-XXXXXXXX")).strip()
         if not re.fullmatch(r"/tmp/mailcow-contacts-[a-zA-Z0-9]+", folder):
             raise MigrationError("Invalid SOGo temporary directory")
@@ -132,3 +138,19 @@ class SogoTarget:
             return record
         except (MigrationError, OSError) as error:
             raise MigrationError("{}\nRetain the private SOGo temporary directory in sogo-mailcow for recovery: {}".format(error, folder)) from error
+
+    def clear_unknown_user(self, username: str) -> str:
+        require_username(username)
+        host = self.effective_configuration().get("SOGoMemcachedHost")
+        if not isinstance(host, str) or not host.strip():
+            raise MigrationError("SOGoMemcachedHost is missing; cannot check cached user lookups")
+        result = self.target.compose(
+            ("exec", "-T", "php-fpm-mailcow", "php", "-r", php_resource("sogo-unknown-user.php")),
+            input_text=json.dumps({"host": host, "username": username}, allow_nan=False),
+            diagnostic_file=self.directory / ("sogo-user-lookup-" + uuid4().hex + ".txt"),
+        ).stdout
+        if result not in ("cleared", "unchanged"):
+            raise MigrationError("Unexpected SOGo user-cache response; retain the preparation record and diagnostics")
+        if result == "cleared":
+            print(username + ": cleared SOGo's cached unknown-user lookup; checking the user source again.")
+        return result
