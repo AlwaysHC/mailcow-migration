@@ -2,8 +2,8 @@
 
 A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to an existing Mailcow installation.
 
-**Status: pre-alpha (`0.1.0.dev0`).** Configuration, source inspection, private exports and read-only account planning are implemented.
-Account creation, message transfer and cutover are not implemented yet. This development snapshot has not been validated end to end.
+**Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
+Message transfer, automated isolation, activation and full cutover are not implemented yet. This snapshot has not been validated end to end.
 
 | Command | Available functionality |
 | --- | --- |
@@ -12,6 +12,8 @@ Account creation, message transfer and cutover are not implemented yet. This dev
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
 | `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
+| `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
+| `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -62,7 +64,7 @@ Quarantine defaults live in `migration.quarantine_notification` (`never`, `hourl
 The wizard initially proposes `weekly` and `add_header`; older configuration files without these fields use the same defaults.
 The shared `MigrationConfiguration.quarantine_attributes` resolver preserves available normalized source values and uses
 the configured default independently for each missing or null value. Invalid source values are rejected.
-Both source planners use this resolver when constructing mailbox payloads. Account migration is not implemented yet.
+Both source planners use this resolver when constructing mailbox payloads, which account staging applies and verification checks.
 
 ## Source inspection
 
@@ -219,6 +221,46 @@ RoundCube data assessment, transfer execution, isolation, DNS handoff, delivery 
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
+## Account staging and verification
+
+Use the unchanged plan and configuration from a completed planning run:
+
+```bash
+mailcow-migrate accounts --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+mailcow-migrate accounts --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --apply
+mailcow-migrate verify --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+`accounts` previews by default. Only `--apply` writes to the Mailcow API. It stages mailboxes with their planned passwords,
+quotas, names and quarantine settings; imports and checks recovery email addresses; adds inactive alias domains, separate
+aliases/catch-alls and BCC rules; then disables the primary domain. Native mailbox delivery routes are left to mailbox creation.
+The domain is temporarily enabled for account creation and disabled on successful completion. An interruption retains earlier
+changes and the journal; it does not automatically undo them. Domain administrators, sender grants, filters and shared settings
+are separate workflows and are not applied by this command.
+
+The command validates the planning manifest, plan fingerprint, saved configuration and account mappings. Applying also requires
+the saved assessment to contain no blocked findings or unresolved decisions. Live target conflicts are checked before the first
+account operation. An existing primary domain is reused only when empty and free of relevant alias/BCC dependencies, with its
+original settings saved before editing. Existing objects are never adopted as a previous batch merely because their names match.
+Conflict details are saved privately in `target-conflict.json`.
+
+`state.json` binds account operations to the plan fingerprint, API origin and local Mailcow directory. The shared operation lock
+covers preview, staging, reconciliation and verification. Each request is recorded before it is sent; successful operations receive
+receipts and are skipped on later runs. Changing the plan or target stops reuse of the journal. Retain the same batch directory
+to resume account staging, and never delete its journal to bypass a conflict. Staging refuses a recorded activation in progress.
+
+An uncertain request is never blindly repeated. On a later invocation, read-only inventory checks must establish every requested
+value. Password fields require a read-only hash check inside `php-fpm-mailcow`; credentials travel through standard input and
+are not printed. A missing, ambiguous or mismatched target object leaves the request pending and stops further writes. A confirmed
+request is recorded as completed without another API write. Thus a preview or verification can reconcile the local journal while
+leaving target accounts unchanged. Password-check diagnostics, when present, are saved privately in the batch directory.
+
+`verify` requires completed staging receipts and compares domain limits, account activity, mailbox quotas/names/quarantine,
+aliases, alias domains, BCC and recovery emails with the saved plan. It does not test password login, messages, filters,
+sender permissions or delivery. Source isolation, message copying, activation and full migration recovery remain pending;
+these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
+account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
 ## Package layout
 
 | Module | Responsibility |
@@ -227,6 +269,7 @@ their assessment. Planning does not resume an existing migration batch; retain i
 | `inspection`, `core.dns`, `sources.inventory` | Read-only source inventories, authoritative DNS agreement, and inspection reports. |
 | `exporting`, `sources.export` | Private source exports, inventory rechecks, completion manifests and file hashes. |
 | `planning`, `plans`, `sources.sql`, `sources.usage` | Account mapping, policy decisions, export validation and measured quotas. |
+| `accounts`, `plans.saved`, `targets.account_inventory`, `targets.reconciliation` | Saved-plan validation, inactive account staging, receipts and readback. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |
@@ -239,7 +282,7 @@ their assessment. Planning does not resume an existing migration batch; retain i
 
 CLI errors use exit status 1, configuration/usage errors 2, interruption 130, and shared-lock contention 75.
 Library callers must hold the workspace lock and verify batch identity before journaled writes. Pending writes require
-reconciliation before retrying; endpoint-specific reconciliation and migration resume remain planned work.
+reconciliation before proceeding. Account staging can resume its own recorded operations; full migration recovery remains planned work.
 The API client verifies TLS, rejects redirects, and never retries writes automatically. Command diagnostics are private
 by default; callers may display known-safe output with explicit secret redaction.
 

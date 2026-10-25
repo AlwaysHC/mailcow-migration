@@ -2,7 +2,7 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping, Optional
 
 from ..configuration import WORK_ROOT
 from .errors import MigrationError, OperationLocked
@@ -55,16 +55,31 @@ def require_identity(state: Mapping[str, Any], expected: Mapping[str, Any]) -> N
 class OperationJournal:
     workspace: Workspace
     relative_path: str
+    identity: Optional[Mapping[str, Any]] = None
+
+    def read(self) -> Mapping[str, Any]:
+        state = (self.workspace.read(self.relative_path) if self.workspace.path(self.relative_path).exists() or self.identity is None
+                 else {**self.identity, "done": []})
+        if self.identity is not None:
+            require_identity(state, self.identity)
+        if not isinstance(state.get("done"), list) or any(not isinstance(item, str) for item in state["done"]):
+            raise MigrationError("Invalid operation journal: missing completed-operation list")
+        if "pending" in state and (not isinstance(state["pending"], str) or not state["pending"]):
+            raise MigrationError("Invalid pending operation; retain the journal for reconciliation")
+        return state
+
+    def save(self, state: Mapping[str, Any]) -> None:
+        if self.identity is not None:
+            require_identity(state, self.identity)
+        self.workspace.write(self.relative_path, state)
 
     def write_mutation(
         self, identifier: str, endpoint: str, payload: Any,
         call: Callable[[str, Any], Any], *, apply: bool = False,
     ) -> str:
         """Call while holding Workspace.lock, after checking the batch's saved identity."""
-        state = self.workspace.read(self.relative_path)
-        done = state.get("done")
-        if not isinstance(done, list) or any(not isinstance(item, str) for item in done):
-            raise MigrationError("Invalid operation journal: missing completed-operation list")
+        state = self.read()
+        done = state["done"]
         if state.get("pending"):
             raise MigrationError("An uncertain operation is pending; reconcile live target state before further writes")
         if identifier in done:
@@ -72,8 +87,8 @@ class OperationJournal:
         if not apply:
             return "would"
         pending = {**state, "pending": identifier, "pendingRequest": {"endpoint": endpoint, "payload": payload}}
-        self.workspace.write(self.relative_path, pending)
+        self.save(pending)
         call(endpoint, payload)
         completed = {key: value for key, value in pending.items() if key not in ("pending", "pendingRequest")}
-        self.workspace.write(self.relative_path, {**completed, "done": [*done, identifier]})
+        self.save({**completed, "done": [*done, identifier]})
         return "completed"

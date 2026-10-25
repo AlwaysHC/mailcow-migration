@@ -1,5 +1,3 @@
-import hashlib
-import json
 import math
 import os
 from dataclasses import asdict
@@ -11,7 +9,7 @@ from .configuration import Configuration
 from .core.domain import domain_name
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
-from .core.storage import local_path, private_directory, read_json, write_private_json, write_private_text
+from .core.storage import json_fingerprint, local_path, private_directory, read_json, write_private_json, write_private_text
 from .inspection import require_inspection_host
 from .plans.assessment import check
 from .plans.domain import MIB, QUOTA_LIMIT, active, build_plan, number
@@ -162,9 +160,8 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
             transfer = transfer_assessment(plan, evidence.source, mailcow, destination, source_checks=quota_mode == "measured")
             evidence.verify()
             checks.extend([*account_policy["checks"], *target["checks"], *transfer["checks"]])
-            encoded = json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
             assessment = {"version": 1, "kind": "account-planning-assessment", "checked_at": datetime.now(timezone.utc).isoformat(),
-                          "plan_sha256": hashlib.sha256(encoded).hexdigest(), "migration_ready": False,
+                          "plan_sha256": json_fingerprint(plan, canonical=True), "migration_ready": False,
                           "quotaMode": quota_mode, "checks": checks, "target": target,
                           "webmail_plan": "webmail-plan.json", "shared_settings_plan": "shared-settings-plan.json",
                           "transfer_plan": "transfer-plan.json"}

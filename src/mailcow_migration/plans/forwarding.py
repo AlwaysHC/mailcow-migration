@@ -2,6 +2,7 @@ import json
 import re
 from typing import Any, Callable, Mapping, Sequence
 
+from .assessment import check
 from ..core.errors import MigrationError
 
 
@@ -9,6 +10,21 @@ def mailbox_delivery(row: Mapping[str, Any]) -> Mapping[str, Any]:
     targets = list(dict.fromkeys(item.strip() for item in str(row["payload"].get("goto") or "").split(",") if item.strip()))
     return {"keepLocal": not row["payload"].get("goto_null") and row["address"] in targets,
             "destinations": [item for item in targets if item != row["address"]]}
+
+
+def mailbox_forwardings(plan: Mapping[str, Any]) -> Mapping[str, Any]:
+    checks, forwardings = [], []
+    for row in plan["aliases"]:
+        if not row["mailbox"]:
+            continue
+        mailbox = next((item for item in plan["mailboxes"] if item["username"] == row["address"]), None)
+        delivery = mailbox_delivery(row)
+        if mailbox is None or not delivery["keepLocal"] or row["active"] != mailbox["active"]:
+            checks.append(check("mailbox-forwarding:" + row["address"], "blocked",
+                                "Automatic mailbox forwarding requires a local copy and matching mailbox/alias activity; source rule retained."))
+        elif delivery["destinations"]:
+            forwardings.append({"username": row["address"], "active": row["active"], **delivery})
+    return {"checks": checks, "forwardings": forwardings}
 
 
 def sieve_string(value: str) -> str:

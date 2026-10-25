@@ -6,8 +6,8 @@ Compatibility depends on source schemas, effective configuration and available c
 This document describes the initial environment requirements and the capabilities needed by planned migration workflows.
 It is not an end-to-end certification of the listed product versions.
 
-Configuration, source inspection, private domain exports and account planning are implemented. Account provisioning,
-message transfer, conversion and recovery remain planned work. The configuration wizard writes versioned JSON that
+Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
+Message transfer, target webmail imports, isolation, activation and full recovery remain planned work. The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
 only to configured sources; an unconfigured server does not need to exist or be reachable.
@@ -33,6 +33,13 @@ PostfixAdmin vacation assessment uses the host's IANA timezone data, normally un
 the system data directory). The bundled Python helper resolves date parts in a separate process, retaining Python 3.8 support
 without changing the CLI process timezone or adding a runtime package. Unknown zones and missing timezone data stop planning.
 Plesk Sieve is prepared for copying; its scripts are not restricted to the subset accepted by the editable SOGo filter mapper.
+
+`accounts` uses a completed saved plan and matching configuration. Preview and `verify` require API inventory access;
+`accounts --apply` requires API write access. Pending writes are reconciled only from observable target values, using
+Mailcow's domain quota field mapping, mailbox attributes, native alias behavior and recovery-email support.
+Password reconciliation additionally requires Docker Compose and the running `php-fpm-mailcow` container with its application
+configuration, PDO database access, `hash_equals` and `verify_hash`. This read-only helper does not expose target password hashes.
+The account journal format supports resuming this application's staging operations, not arbitrary external migration journals.
 
 ## Initial compatibility matrix
 

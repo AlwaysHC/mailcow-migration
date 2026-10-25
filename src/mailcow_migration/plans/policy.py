@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from .assessment import check
-from .domain import active, address
+from .domain import active
 from .evidence import ExportEvidence
-from .forwarding import mailbox_delivery
+from .forwarding import mailbox_forwardings
 from .global_settings import shared_settings_assessment
+from .recovery import recovery_plan
 from .sieve_evidence import load_sieve_evidence
 from .webmail import webmail_assessment
 from ..core.errors import ConfigurationError, MigrationError
@@ -58,20 +59,12 @@ def administrator_name(username: str, policy: Mapping[str, Any]) -> str:
 
 
 def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mapping[str, Any]) -> Mapping[str, Any]:
-    checks, admins, recovery, forwardings = [], [], [], []
+    forwarding = mailbox_forwardings(plan)
+    recovery = recovery_plan(plan)
+    checks, admins = [*forwarding["checks"], *recovery["checks"]], []
     source = plan["source"]
     scripts = load_sieve_evidence(plan, evidence)
-    for row in plan["aliases"]:
-        if not row["mailbox"]:
-            continue
-        mailbox = next((item for item in plan["mailboxes"] if item["username"] == row["address"]), None)
-        delivery = mailbox_delivery(row)
-        if mailbox is None or not delivery["keepLocal"] or row["active"] != mailbox["active"]:
-            checks.append(check("mailbox-forwarding:" + row["address"], "blocked",
-                                "Automatic mailbox forwarding requires a local copy and matching mailbox/alias activity; source rule retained."))
-        elif delivery["destinations"]:
-            forwardings.append({"username": row["address"], "active": row["active"], **delivery})
-    forwardings.extend(scripts.forwardings)
+    forwardings = [*forwarding["forwardings"], *scripts.forwardings]
     for row in source["admins"]:
         if active(row.get("superadmin")):
             continue
@@ -100,16 +93,6 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
             row["username"], username)))
     if len({row["username"].lower() for row in admins}) != len(admins):
         raise MigrationError("Administrator name mappings collide; choose distinct names in adminNames")
-    for row in source["mailboxes"]:
-        username, email, phone = row["username"], str(row.get("email_other") or "").strip(), str(row.get("phone") or "").strip()
-        if phone:
-            checks.append(check("recovery:" + username, "blocked", "Mailcow supports recovery email, not phone/SMS recovery"))
-        if email and (not address(email.lower()) or email.lower() == username.lower()):
-            checks.append(check("recovery:" + username, "blocked", "Invalid or self-referencing recovery email; correct the source value"))
-        if (email or phone) and not any(item["username"] == username for item in plan["mailboxes"]):
-            checks.append(check("recovery:" + username, "blocked", "Recovery contact has no target mailbox"))
-        if email:
-            recovery.append({"username": username, "email": email, "operation": "import recovery email " + username})
     checks.append(check("fetchmail", "blocked" if source["fetchmail"] else "not-needed",
                         "Fetchmail jobs, including disabled jobs, require a supported native mapping" if source["fetchmail"]
                         else "No fetchmail jobs to migrate"))
@@ -133,5 +116,5 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
         ("webmail-data", "RoundCube preservation and SOGo import assessment are not implemented yet"),
         ("cutover-resume", "Isolation, migration journals, DNS handoff and delivery verification are not implemented yet"),
     ))
-    return {"checks": checks, "admins": admins, "recovery": recovery, "forwardings": forwardings,
+    return {"checks": checks, "admins": admins, "recovery": recovery["emails"], "forwardings": forwardings,
             "senderPermissions": permissions, "webmail": webmail, "sharedSettings": shared_settings}

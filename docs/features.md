@@ -3,6 +3,7 @@
 The first release covers domain-by-domain mail migration from PostfixAdmin or Plesk to an existing Mailcow installation.
 Checked items are implemented. Unchecked items are planned work, not currently available migration capabilities.
 The current pre-alpha supports configuration, source inspection, private exports and read-only account planning.
+Inactive account staging and account inventory verification are also available as explicit operations.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -26,6 +27,7 @@ Configuration generation is available in the current development version.
   The shared loader and local `check-config` command exist; migration workflows still need to be connected.
 - [ ] Preserve existing domain-specific settings, policy decisions, and resume identity checks when resolving the configuration.
   Configuration supplies inputs; journals retain operation state. Editing the file must not silently retarget an unfinished batch.
+  Saved-plan/configuration checks and account-journal identity are implemented; full workflow resume remains pending.
 - [x] Keep configuration generation limited to local configuration output. Server preparation, source isolation,
   account changes, and mail transfer remain separate operations using the saved configuration.
 
@@ -66,11 +68,15 @@ Configuration generation is available in the current development version.
 
 - [x] Apply the configured quarantine defaults through the shared resolver in both source planners when source values are unavailable.
   The initial defaults are weekly notifications and the Junk-folder category.
-- [ ] **Preserve:** Stage domains, mailboxes, active/inactive states, display names, aliases, alias domains, and supported catch-alls.
+- [x] **Preserve:** Preview and stage inactive domains, mailboxes, display names, aliases, alias domains, and supported catch-alls.
   Unknown-recipient behavior and forwarding-only accounts must have explicit target equivalents.
+  Preserve source activity in the plan; verified activation remains a separate pending workflow.
+- [x] Bind account writes to a completed saved plan, record requests before execution and reconcile uncertain outcomes without repeating writes.
+  Preserve empty-domain backups, existing-object conflicts and recovery-email readback; verify staged account inventories explicitly.
 - [ ] **Preserve:** Transfer accepted mailbox password hashes without requiring user resets. The PostfixAdmin baseline accepts
   MD5-CRYPT only. Plesk accepts MD5-CRYPT, SHA256-CRYPT, SHA512-CRYPT, and BLF-CRYPT; available plaintext is converted to SSHA256.
   Verify target scheme support and block malformed, truncated, or unmapped credentials.
+  Account staging submits the planned hashes and reconciliation verifies uncertain password writes; comprehensive login checks remain pending.
 - [ ] **Configure:** Preserve mailbox forwarding destinations and keep-copy behavior. Account for personal-filter ordering;
   the current Plesk path blocks forwarding combined with personal Sieve until an ordering adapter exists.
 - [x] Inspect the target mail volume and vmail identity, validate mailbox paths, and probe sender/receiver transfer capabilities separately.
@@ -131,6 +137,7 @@ Configuration generation is available in the current development version.
   Record mutation intent before execution and reconcile uncertain results before retrying.
 - [ ] **Preserve:** Resume without duplicate accounts, replacing mail, or overwriting later user edits.
   Retain recovery evidence after interruptions and failures.
+  Account staging resumes its own receipts and pending requests; mail, isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.

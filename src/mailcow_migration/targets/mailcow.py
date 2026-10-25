@@ -38,6 +38,12 @@ class MailcowApi:
         if self.timeout <= 0:
             raise ConfigurationError("Mailcow API timeout must be positive")
 
+    def inventory(self, kind: str) -> list:
+        rows = self.request("get/{}/all".format(kind))
+        if any(not isinstance(row, dict) for row in rows):
+            raise ApiError("Invalid Mailcow inventory; contents omitted")
+        return rows
+
     def request(self, endpoint: str, payload: Any = READ, *, object_response: bool = False) -> Any:
         if not re.fullmatch(r"[a-zA-Z0-9_@.+%/-]+", endpoint) or endpoint.startswith("/") or ".." in endpoint.split("/"):
             raise ConfigurationError("Invalid Mailcow API endpoint")
@@ -115,8 +121,10 @@ class MailcowTarget:
 
     def compose(
         self, arguments: Sequence[str], *, input_text: Optional[str] = None, timeout: float = 120, private_output: bool = True,
+        diagnostic_file: Optional[Path] = None,
     ) -> CommandResult:
         return run_command(
             ("docker", "compose", "--project-directory", self.settings.directory, *arguments),
             input_text=input_text, timeout=timeout, private_output=private_output, label="Mailcow Docker Compose",
+            diagnostic_file=diagnostic_file,
         )
