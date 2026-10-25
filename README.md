@@ -3,7 +3,8 @@
 A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to an existing Mailcow installation.
 
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
-Target isolation is available as a separate operation. Source isolation, message transfer, activation and full cutover remain pending.
+Target isolation and PostfixAdmin login controls are available as separate operations.
+Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -16,6 +17,7 @@ This snapshot has not been validated end to end.
 | `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
 | `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
 | `target-isolation` | Preview, pause and check Mailcow access, delivery and writers for a staged batch; retain guarded restoration state. |
+| `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -219,7 +221,7 @@ records `target_verified: false` and `selection_recorded: false`: selection/excl
 privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-RoundCube data assessment, transfer execution, source isolation, DNS handoff, delivery verification and full migration resume also remain pending.
+RoundCube data assessment, transfer execution, full source isolation, DNS handoff, delivery verification and full migration resume remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -259,9 +261,48 @@ leaving target accounts unchanged. Password-check diagnostics, when present, are
 
 `verify` requires completed staging receipts and compares domain limits, account activity, mailbox quotas/names/quarantine,
 aliases, alias domains, BCC and recovery emails with the saved plan. It does not test password login, messages, filters,
-sender permissions or delivery. Source isolation, message copying, activation and full migration recovery remain pending;
+sender permissions or delivery. Full source isolation, message copying, activation and full migration recovery remain pending;
 these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
+## PostfixAdmin source logins
+
+Preview the login-control step using the saved plan and configuration:
+
+```bash
+mailcow-migrate source-logins --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+The default `preview` action checks the configured source, required commands, effective Dovecot passdb and supported SQL query.
+It identifies whether the exact batch exclusion already exists and rejects exclusions that partially overlap these users.
+Only a single SQL passdb using `/etc/dovecot/dovecot-mysql.conf` is supported. The base password query must match the supported
+form; existing migration exclusions for other batches are retained. Wildcard mailbox names are rejected before remote commands.
+The plan's source connection must match its planning manifest and current configuration. Plesk requires its separate adapter,
+which remains pending; an alias-only batch with no mailbox logins needs no login operation.
+
+After users have saved drafts and closed clients, `--action freeze --apply` excludes exactly the planned mailbox usernames,
+reloads Dovecot, clears their authentication caches and disconnects their sessions. Each account must produce the expected
+absent-entry authentication result, and session checks must show no remaining connections. Unexpected command failures stop
+the operation; a shared Dovecot process is never forcibly killed to disconnect one batch. Passwords and mailbox activity flags
+remain unchanged. Saved blocked findings and unresolved decisions prevent a freeze.
+
+Before replacing the query, the source helper locks its configuration operation, checks the full file hash, and saves a private
+backup under `/root/mailcow-in-progress/auth-backups`. It preserves ownership, permissions and attributes, verifies the backup,
+and checks for drift again before replacement. SQL connection credentials and full configuration backups stay on the source.
+The private local `source-logins.json` journal records source/plan/user identity, the query change, backup location, verification
+hashes and the stage being attempted. Keep this journal and the source backups after any interruption; an earlier change may
+already be installed. Repeating freeze rereads the supported live query and finishes reload/cache/session work without adding
+another copy of the same exclusion. `--action check` verifies a completed freeze without changing source configuration or sessions.
+Configuration drift requires a new preview before continuing with a reviewed freeze.
+
+`--action release --apply` removes only the exact batch exclusion, reloads Dovecot and clears those users' caches, then stops.
+It remains available when unrelated saved planning findings block freeze. Freeze and release both refuse recorded target
+activation or an uncertain target write. Release leaves separate delivery holds and Mailcow staging in place and moves no mail;
+review those holds before returning users to the source. Do not restore an entire SQL configuration over later batches' changes.
+
+This command implements login control only. Source delivery routing, SMTP submission isolation, RoundCube session revocation,
+writer checks and the combined source-isolation preflight are still pending. Complete those steps before copying messages;
+a successful login freeze does not establish full source isolation or migration readiness.
 
 ## Target isolation
 
@@ -296,7 +337,7 @@ completed activation and the webmail journal records completed import. The activ
 pending in this pre-alpha, so a normally staged batch cannot yet pass the release guard. A pause therefore leaves the batch
 isolated until those workflows are available and completed; this command is not a complete pause/cutover/restore workflow.
 Initial isolation refuses activation in progress, a released batch or an interrupted release. Repairing webmail on an already
-activated batch and source isolation remain separate planned work. Isolation never copies mail or activates accounts.
+activated batch and full source isolation remain separate planned work. Isolation never copies mail or activates accounts.
 
 ## Package layout
 
@@ -308,6 +349,7 @@ activated batch and source isolation remain separate planned work. Isolation nev
 | `planning`, `plans`, `sources.sql`, `sources.usage` | Account mapping, policy decisions, export validation and measured quotas. |
 | `accounts`, `plans.saved`, `targets.account_inventory`, `targets.reconciliation` | Saved-plan validation, inactive account staging, receipts and readback. |
 | `isolation`, `targets.isolation`, `targets.writers` | Target access/delivery isolation, writer checks, recovery journals and guarded restoration. |
+| `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |

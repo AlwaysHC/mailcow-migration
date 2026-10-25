@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -7,6 +7,7 @@ from .domain import valid_domain
 from ..configuration import Configuration
 from ..core.errors import MigrationError
 from ..core.storage import json_fingerprint, local_path, read_json
+from ..sources import SourceConnection, configured_sources
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,12 @@ class SavedPlan:
     plan: Mapping[str, Any] = field(repr=False)
     assessment: Mapping[str, Any] = field(repr=False)
     fingerprint: str
+    source: SourceConnection
+
+    @property
+    def blocking_findings(self) -> str:
+        return "\n".join("{}: {}".format(row["id"], row["detail"]) for row in self.assessment["checks"]
+                         if row["status"] in ("blocked", "decision"))
 
 
 def validate_saved_plan(plan: Any) -> None:
@@ -65,10 +72,13 @@ def load_saved_plan(file: Path, configuration: Configuration) -> SavedPlan:
         raise MigrationError("Expected an unchanged plan from a completed planning run")
     if manifest.get("configuration") != configuration.document():
         raise MigrationError("Configuration differs from the saved plan; retain the original batch configuration and state")
+    sources = tuple(source for source in configured_sources(configuration) if asdict(source) == manifest.get("source"))
+    if len(sources) != 1 or plan["source"].get("kind", "postfixadmin") != sources[0].kind.value:
+        raise MigrationError("Saved plan source differs from its manifest or configured connection")
     if (not isinstance(assessment, dict) or type(assessment.get("version")) is not int or assessment["version"] != 1
             or assessment.get("kind") != "account-planning-assessment"
             or assessment.get("plan_sha256") != fingerprint or not isinstance(assessment.get("checks"), list)
             or any(not isinstance(row, dict) or any(not isinstance(row.get(key), str) for key in ("id", "status", "detail"))
                    for row in assessment["checks"])):
         raise MigrationError("Missing or inconsistent saved planning assessment")
-    return SavedPlan(path.parent, plan, assessment, fingerprint)
+    return SavedPlan(path.parent, plan, assessment, fingerprint, sources[0])

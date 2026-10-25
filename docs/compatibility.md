@@ -7,7 +7,8 @@ This document describes the initial environment requirements and the capabilitie
 It is not an end-to-end certification of the listed product versions.
 
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
-Target isolation is available separately. Message transfer, webmail imports, source isolation, activation and full recovery remain planned work.
+Target isolation and PostfixAdmin login controls are available separately.
+Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
@@ -76,8 +77,11 @@ That version boundary does not establish compatibility with every current or fut
 MySQL clients from 5.5.3 or MariaDB clients from 5.5, Bash from 3.2, and Dovecot from 2.0. These are command baselines,
 not supported database or mail-server release ranges.
 
-Planned source login isolation requires one SQL passdb at `/etc/dovecot/dovecot-mysql.conf`, with a recognized
+`source-logins` requires one SQL passdb at `/etc/dovecot/dovecot-mysql.conf`, with a recognized
 query and account layout. Supporting additional layouts is future work.
+The source needs PHP CLI with `JSON_THROW_ON_ERROR`, `cp --preserve=all`, `doveconf` and `doveadm`,
+plus permission to reload Dovecot and edit its SQL configuration. That configuration must be a regular single-link file
+without symlinks. Full backups and database credentials remain on the source; only the query and verification hashes return.
 Postfix commands and configuration must permit scoped submission/delivery holds, queue inspection, and source forwarding.
 Mailboxes must use the inspected Maildir layout. A resolvable mail-root symlink is allowed; unsafe mailbox/message links block copying.
 

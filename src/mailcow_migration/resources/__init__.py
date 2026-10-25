@@ -11,3 +11,10 @@ def read_resource(name: str) -> str:
     if data is None:
         raise MigrationError("Bundled resource was not found: {}".format(name))
     return data.decode("utf-8").replace("\r\n", "\n")
+
+
+def php_resource(name: str) -> str:
+    helper = read_resource(name)
+    if not helper.startswith("<?php\n"):
+        raise MigrationError("Invalid packaged PHP helper: " + name)
+    return helper[6:]

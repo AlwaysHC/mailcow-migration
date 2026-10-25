@@ -28,7 +28,7 @@ class SshConnection:
     def run(
         self, arguments: Sequence[str], *, input_text: Optional[str] = None,
         timeout: float = 120, private_output: bool = True, secrets: Sequence[str] = (),
-        diagnostic_file: Optional[Path] = None,
+        diagnostic_file: Optional[Path] = None, allowed_codes: Sequence[int] = (0,),
     ) -> CommandResult:
         if not arguments or isinstance(arguments, (str, bytes)):
             raise MigrationError("Remote commands require an argument sequence")
@@ -36,7 +36,7 @@ class SshConnection:
         return run_command(
             (*self.arguments(), self.host, remote), input_text=input_text, timeout=timeout,
             label="SSH {} ({})".format(self.host, arguments[0]), private_output=private_output, secrets=secrets,
-            diagnostic_file=diagnostic_file,
+            diagnostic_file=diagnostic_file, allowed_codes=allowed_codes,
         )
 
     def copy_to(self, files: Sequence[Path], remote_directory: str, diagnostic_file: Optional[Path] = None) -> None:

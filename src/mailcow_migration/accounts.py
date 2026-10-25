@@ -168,10 +168,9 @@ def run_accounts(configuration: Configuration, file: Path, *, apply: bool = Fals
                 print("The domain is enabled for account creation, then disabled. Its original settings are saved before the first edit.")
         operations = account_mutations(plan, recovery["emails"], reuse_domain=existing is not None or bool(state.get("existingDomain")))
         validate_account_journal(state, operations)
-        findings = [row for row in batch.assessment["checks"] if row["status"] in ("blocked", "decision")]
+        findings = batch.blocking_findings
         if findings:
-            message = "Resolve the saved planning findings before account writes:\n" + "\n".join(
-                "{}: {}".format(row["id"], row["detail"]) for row in findings)
+            message = "Resolve the saved planning findings before account writes:\n" + findings
             if apply:
                 raise MigrationError(message)
             print(message)

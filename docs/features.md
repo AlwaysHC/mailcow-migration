@@ -3,7 +3,7 @@
 The first release covers domain-by-domain mail migration from PostfixAdmin or Plesk to an existing Mailcow installation.
 Checked items are implemented. Unchecked items are planned work, not currently available migration capabilities.
 The current pre-alpha supports configuration, source inspection, private exports and read-only account planning.
-Inactive account staging, account inventory verification and target isolation are also available as explicit operations.
+Inactive account staging, account inventory verification, target isolation and PostfixAdmin login controls are available as explicit operations.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -123,6 +123,10 @@ Configuration generation is available in the current development version.
   Source assessment is available; guided selections/exclusions, credentials, privilege decisions, application and target verification remain pending.
 - [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
   and revoke webmail access while leaving unrelated domains operational.
+- [x] Preview, freeze, check and release PostfixAdmin batch logins using the supported SQL passdb and exact query exclusions.
+  Preserve other batches' exclusions, source-side full configuration backups, cache flushing and session checks.
+  Retain a source/plan-bound operation journal and block changes after target activation starts or during uncertain target writes.
+  Full source delivery/submission isolation, RoundCube session revocation and the separate Plesk adapter remain pending.
 - [x] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
   Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
@@ -141,7 +145,8 @@ Configuration generation is available in the current development version.
 - [ ] **Preserve:** Resume without duplicate accounts, replacing mail, or overwriting later user edits.
   Retain recovery evidence after interruptions and failures.
   Account staging resumes its own receipts and pending requests; target isolation retains resumable pause/release state.
-  Mail, source isolation, activation and other workflow journals remain pending.
+  PostfixAdmin login controls retain a resumable operation journal and support release before activation.
+  Mail, full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.
