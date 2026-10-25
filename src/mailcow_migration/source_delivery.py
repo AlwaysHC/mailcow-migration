@@ -1,0 +1,51 @@
+import os
+import sys
+from pathlib import Path
+
+from .accounts import account_journal, require_before_activation
+from .configuration import Configuration
+from .core.errors import ConfigurationError, MigrationError
+from .core.state import Workspace
+from .plans.saved import load_saved_plan
+from .sources.delivery import HOLD, SourceDelivery
+from .sources.logins import SourceLogins
+
+
+def run_source_delivery(configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False) -> int:
+    if sys.platform != "linux" or os.geteuid() != 0:
+        raise ConfigurationError("Run source delivery isolation on the Linux Mailcow host as root")
+    if action not in ("preview", "pause", "check") or apply != (action == "pause"):
+        raise ConfigurationError("Use --action pause --apply to change delivery; preview and check are read-only")
+    with Workspace().lock():
+        batch = load_saved_plan(file, configuration)
+        if action != "check":
+            require_before_activation(account_journal(batch, configuration).read())
+        delivery = SourceDelivery(batch, configuration.mailcow.api)
+        if action == "check":
+            if batch.plan["mailboxes"]:
+                SourceLogins(batch).check()
+            delivery.check()
+            print("Source delivery holds, recipient routing, queued envelopes and detected writers passed checks.")
+        else:
+            findings = batch.blocking_findings
+            if findings and action == "pause":
+                raise MigrationError("Resolve saved planning findings before pausing source delivery:\n" + findings)
+            snapshot = delivery.inspect()
+            if action == "preview":
+                request = delivery.routing_request
+                held = sum(snapshot.transport["entries"].get(key) == HOLD for key in delivery.keys)
+                print("Source: {}; {} of {} batch transport keys already held.".format(batch.source.ssh.host, held, len(delivery.keys)))
+                print("Would preserve {} recipient addresses and catch-all behavior: {}.".format(len(request["recipients"]), request["catchAll"]))
+                print("Would filter {} BCC maps, defer delivery and drain old Postfix workers.".format(len(snapshot.routing["bccMaps"])))
+                print("Queued recipients are checked after recipient mappings are isolated; this preview does not establish queue safety.")
+                print("Delivery holds remain until guarded handoff; automatic release is not available in this snapshot.")
+                if findings:
+                    print("Resolve these saved planning findings before pause:\n" + findings)
+                print("Preview finished; no source configuration or delivery journal was changed.")
+            else:
+                if batch.plan["mailboxes"]:
+                    SourceLogins(batch).check()
+                delivery.pause(snapshot)
+                print("Source delivery pause completed. Holds remain until the guarded handoff workflow is available and completed.")
+        print("RoundCube session revocation and complete submission isolation remain pending. Full source isolation is not established.")
+    return 0

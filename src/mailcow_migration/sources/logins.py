@@ -1,5 +1,4 @@
 import hashlib
-import json
 import re
 import time
 from dataclasses import asdict, dataclass, field
@@ -8,12 +7,12 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 from uuid import uuid4
 
 from . import SourceKind
+from .php import source_php
 from ..core.commands import CommandResult
 from ..core.errors import MigrationError
 from ..core.state import require_identity
-from ..core.storage import decode_json, local_path, read_json, write_private_json
+from ..core.storage import local_path, read_json, write_private_json
 from ..plans.saved import SavedPlan
-from ..resources import php_resource
 
 BASE_QUERY = "SELECT username AS user,password FROM mailbox WHERE username = '%u' AND active='1'"
 EXCLUSION = re.compile(r" AND username NOT IN \('(?:[^'\\\r\n]|'')*'(?:, '(?:[^'\\\r\n]|'')*')*\)")
@@ -101,13 +100,8 @@ class SourceLogins:
                                          diagnostic_file=self.batch.directory / ("source-logins-" + uuid4().hex + ".txt"))
 
     def configuration(self, action: str, **values: str) -> Mapping[str, str]:
-        result = self.command(("php", "-d", "display_errors=stderr", "-r", php_resource("postfixadmin-logins.php")),
-                              input_text=json.dumps({"action": action, **values}, allow_nan=False))
-        try:
-            response = decode_json(result.stdout)
-        except (ValueError, UnicodeError) as error:
-            raise MigrationError("Invalid source login configuration response; contents omitted") from error
-        if (not isinstance(response, dict) or not isinstance(response.get("hash"), str)
+        response = source_php(self.batch.source, self.batch.directory, "postfixadmin-logins.php", {"action": action, **values})
+        if (not isinstance(response.get("hash"), str)
                 or not re.fullmatch(r"[a-f0-9]{64}", response["hash"])
                 or action == "read" and not isinstance(response.get("query"), str)
                 or action == "write" and response.get("backup") != BACKUPS + values["expectedHash"] + ".conf"):

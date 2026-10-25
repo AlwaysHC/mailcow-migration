@@ -2,11 +2,12 @@ import os
 import sys
 from pathlib import Path
 
-from .accounts import account_journal
+from .accounts import account_journal, require_before_activation
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
 from .plans.saved import load_saved_plan
+from .sources.delivery import SourceDelivery
 from .sources.logins import SourceLogins, login_query
 
 
@@ -19,9 +20,7 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
         batch = load_saved_plan(file, configuration)
         logins = SourceLogins(batch)
         if action != "check":
-            state = account_journal(batch, configuration).read()
-            if state.get("pending") or state.get("activated") or "enable domain for activation" in state["done"]:
-                raise MigrationError("Source login changes are forbidden after activation starts or during an uncertain target write")
+            require_before_activation(account_journal(batch, configuration).read())
         if not logins.users:
             print("No mailbox logins in this batch; no source login operation is needed.")
             return 0
@@ -32,6 +31,9 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
             findings = batch.blocking_findings
             if findings and action == "freeze":
                 raise MigrationError("Resolve the saved planning findings before freezing source logins:\n" + findings)
+            if action == "freeze":
+                print("Checking source delivery prerequisites before changing logins...")
+                SourceDelivery(batch, configuration.mailcow.api).inspect()
             snapshot = logins.inspect()
             if action == "preview":
                 _, blocked = login_query(snapshot.query, logins.users, freeze=True)

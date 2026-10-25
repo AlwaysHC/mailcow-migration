@@ -114,6 +114,11 @@ def account_journal(batch: SavedPlan, configuration: Configuration) -> Operation
     return OperationJournal(Workspace(batch.directory), "state.json", identity)
 
 
+def require_before_activation(state: Mapping[str, Any]) -> None:
+    if state.get("pending") or state.get("activated") or "enable domain for activation" in state["done"]:
+        raise MigrationError("Source changes are forbidden after target activation starts or during an uncertain target write")
+
+
 def run_accounts(configuration: Configuration, file: Path, *, apply: bool = False, verify: bool = False) -> int:
     if sys.platform != "linux" or os.geteuid() != 0:
         raise ConfigurationError("Run account staging on the Linux Mailcow host as root")

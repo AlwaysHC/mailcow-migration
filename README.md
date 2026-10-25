@@ -3,7 +3,7 @@
 A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to an existing Mailcow installation.
 
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
-Target isolation and PostfixAdmin login controls are available as separate operations.
+Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
 Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -18,6 +18,7 @@ This snapshot has not been validated end to end.
 | `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
 | `target-isolation` | Preview, pause and check Mailcow access, delivery and writers for a staged batch; retain guarded restoration state. |
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
+| `source-delivery` | Preview, pause and check PostfixAdmin delivery and recipient expansion, with queue safeguards and recovery records. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -281,7 +282,9 @@ The plan's source connection must match its planning manifest and current config
 which remains pending; an alias-only batch with no mailbox logins needs no login operation.
 
 After users have saved drafts and closed clients, `--action freeze --apply` excludes exactly the planned mailbox usernames,
-reloads Dovecot, clears their authentication caches and disconnects their sessions. Each account must produce the expected
+reloads Dovecot, clears their authentication caches and disconnects their sessions. Before changing logins, it checks the
+delivery prerequisites described below; delivery blockers stop freeze, while login release remains available.
+Each account must produce the expected
 absent-entry authentication result, and session checks must show no remaining connections. Unexpected command failures stop
 the operation; a shared Dovecot process is never forcibly killed to disconnect one batch. Passwords and mailbox activity flags
 remain unchanged. Saved blocked findings and unresolved decisions prevent a freeze.
@@ -300,9 +303,52 @@ It remains available when unrelated saved planning findings block freeze. Freeze
 activation or an uncertain target write. Release leaves separate delivery holds and Mailcow staging in place and moves no mail;
 review those holds before returning users to the source. Do not restore an entire SQL configuration over later batches' changes.
 
-This command implements login control only. Source delivery routing, SMTP submission isolation, RoundCube session revocation,
-writer checks and the combined source-isolation preflight are still pending. Complete those steps before copying messages;
-a successful login freeze does not establish full source isolation or migration readiness.
+This command implements login control only. Delivery controls are a separate step. Complete submission isolation, RoundCube
+session revocation and the combined source-isolation workflow remain pending; a successful login freeze does not establish
+full source isolation or migration readiness.
+
+## PostfixAdmin source delivery
+
+Preview delivery controls using the same saved plan and configuration:
+
+```bash
+mailcow-migrate source-delivery --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+The default `preview` action reads source routing, BCC maps, configuration ownership and directly referenced mail-sync cron jobs.
+It requires one primary domain, supported hash BCC maps, the retry/error transport, regexp maps, and an empty or `+` recipient
+delimiter. Linked domains, conflicting routes, service-specific overrides, global `always_bcc`, changed managed files and
+unsupported map types stop the operation. The same routing preflight now runs before a source login freeze.
+
+`--action pause --apply` requires the saved login freeze to pass current configuration, authentication and session checks.
+An alias-only batch has no login requirement. Saved blocked findings, unresolved decisions, recorded target activation and
+uncertain target writes prevent the pause. Under the shared lock, the command records its intent, backs up source configuration,
+adds domain and exact-mailbox retry routes, compiles maps, reloads Postfix and drains old delivery workers.
+
+The next stage preserves accepted recipient addresses and catch-all behavior through an identity alias map, preventing this
+domain's source alias/vacation expansion. It uses filtered copies of supported BCC maps, preserving originals and other domains'
+entries. Delivery stays deferred while mappings are installed, workers drain and queued envelopes are checked. Mailbox and
+domain route lookups, accepted/unknown-recipient behavior, detected scheduled jobs and open writable mailbox files must verify.
+These checks cannot discover every writer hidden behind a custom script; source account administration and custom batch imports
+must remain paused separately.
+
+The source records queue IDs present after recipient isolation. Queued recipients with prior alias/vacation expansion,
+unaccounted original-recipient history, ambiguous BCC copies or administrative holds require reconciliation. The global
+original-recipient tracking setting is preserved. Postfix versions supporting envelope-only `postcat` use it; the alternate
+format is parsed locally and message headers, bodies and attachments are discarded rather than returned or logged.
+The delivery command never deletes messages, requeues mail, flushes the whole queue or starts forwarding to Mailcow.
+Its preview cannot establish queue safety: the final queue checks happen after recipient isolation and worker draining.
+
+The private local `source-delivery.json` journal binds operation stages and backup locations to the source, API origin and plan.
+Source configuration backups remain under `/root/mailcow-in-progress/delivery-backups`; source routing and queue-history records
+are retained with the managed maps. File/configuration fingerprints, source locks and readback protect each update. An interrupted
+pause can leave holds or mappings installed; retain all records and rerun the same command after resolving the reported blocker.
+`--action check` verifies a completed delivery pause and its login freeze without changing services or queue scheduling.
+
+This snapshot provides no delivery-release command. Holds remain until guarded handoff is implemented and completed; releasing
+source logins alone does not remove them. The delivery journal explicitly records `source_isolated: false` and
+`webmail_sessions_verified: false`. RoundCube session revocation, complete submission isolation and combined source readiness
+remain pending, so this command does not authorize copying, activation or cutover. Plesk retains its separate pending adapter.
 
 ## Target isolation
 
@@ -350,6 +396,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `accounts`, `plans.saved`, `targets.account_inventory`, `targets.reconciliation` | Saved-plan validation, inactive account staging, receipts and readback. |
 | `isolation`, `targets.isolation`, `targets.writers` | Target access/delivery isolation, writer checks, recovery journals and guarded restoration. |
 | `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
+| `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |

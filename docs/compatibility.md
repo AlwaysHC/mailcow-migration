@@ -7,7 +7,7 @@ This document describes the initial environment requirements and the capabilitie
 It is not an end-to-end certification of the listed product versions.
 
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
-Target isolation and PostfixAdmin login controls are available separately.
+Target isolation and PostfixAdmin login and delivery controls are available separately.
 Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -82,6 +82,13 @@ query and account layout. Supporting additional layouts is future work.
 The source needs PHP CLI with `JSON_THROW_ON_ERROR`, `cp --preserve=all`, `doveconf` and `doveadm`,
 plus permission to reload Dovecot and edit its SQL configuration. That configuration must be a regular single-link file
 without symlinks. Full backups and database credentials remain on the source; only the query and verification hashes return.
+Before freeze, source routing must also pass the `source-delivery` preview; login release remains available when delivery checks fail.
+`source-delivery` requires one primary domain, a safe `/root/mailcow-in-progress` directory from source preparation,
+Postfix retry/error transport, hash/regexp maps, `postconf`, `postmap`, `postfix`, `postqueue` and `postcat`, and readable cron/`/proc` data.
+Only hash BCC maps beneath `/etc/postfix` are adapted; global `always_bcc`, incompatible service overrides, linked domains and
+recipient delimiters other than empty or `+` block this path. Queue inspection selects `postcat -e` for Postfix 2.7 or later,
+otherwise parses `postcat -v` locally without retaining message content. Its delivery pause is not full source isolation;
+webmail sessions, combined submission checks and guarded forwarding/release remain pending.
 Postfix commands and configuration must permit scoped submission/delivery holds, queue inspection, and source forwarding.
 Mailboxes must use the inspected Maildir layout. A resolvable mail-root symlink is allowed; unsafe mailbox/message links block copying.
 
