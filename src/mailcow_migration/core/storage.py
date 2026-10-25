@@ -71,18 +71,29 @@ def write_private_json(path: Path, value: Any, *, replace: bool = False) -> None
 
 
 def write_private_text(path: Path, content: str, *, replace: bool = False) -> None:
+    write_atomic_text(path, content, replace=replace, private=True)
+
+
+def write_atomic_text(path: Path, content: str, *, replace: bool = False, private: bool = False) -> None:
     if os.name != "posix":
-        raise MigrationError("Private configuration and state writes require a POSIX host; run on the Linux Mailcow host")
+        raise MigrationError("Atomic configuration and state writes require a POSIX host; run on the Linux Mailcow host")
     destination = local_path(path)
-    parent = private_directory(destination.parent)
+    parent = private_directory(destination.parent) if private else destination.parent
+    if not parent.is_dir():
+        raise MigrationError("Configuration directory does not exist: {}".format(parent))
     if destination.exists() and (not replace or not destination.is_file()):
         raise MigrationError("File already exists; choose another output path: {}".format(destination))
+    metadata = destination.stat() if destination.exists() and not private else None
     descriptor, name = tempfile.mkstemp(prefix=".{}-".format(destination.name), dir=str(parent))
     temporary = Path(name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
             stream.write(content)
             stream.flush()
+            if not private:
+                if metadata is not None:
+                    os.fchown(stream.fileno(), metadata.st_uid, metadata.st_gid)
+                os.fchmod(stream.fileno(), stat.S_IMODE(metadata.st_mode) & 0o777 if metadata else 0o644)
             os.fsync(stream.fileno())
         local_path(destination)
         if replace:

@@ -3,7 +3,7 @@
 The first release covers domain-by-domain mail migration from PostfixAdmin or Plesk to an existing Mailcow installation.
 Checked items are implemented. Unchecked items are planned work, not currently available migration capabilities.
 The current pre-alpha supports configuration, source inspection, private exports and read-only account planning.
-Inactive account staging and account inventory verification are also available as explicit operations.
+Inactive account staging, account inventory verification and target isolation are also available as explicit operations.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -123,8 +123,11 @@ Configuration generation is available in the current development version.
   Source assessment is available; guided selections/exclusions, credentials, privilege decisions, application and target verification remain pending.
 - [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
   and revoke webmail access while leaving unrelated domains operational.
-- [ ] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.
+- [x] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
+  Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
+  Check protocol controls, sessions, SOGo guards, delivery holds, sync jobs and detected scheduled/open-file writers.
+  Restoration is implemented but requires completed activation and webmail import; those workflows are still pending.
 - [ ] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
   and require operator delivery/client checks including received-message authentication results.
 - [ ] **Configure:** Offer confirmed certificate setup, DKIM generation, relay assignment, and per-domain source forwarding.
@@ -137,7 +140,8 @@ Configuration generation is available in the current development version.
   Record mutation intent before execution and reconcile uncertain results before retrying.
 - [ ] **Preserve:** Resume without duplicate accounts, replacing mail, or overwriting later user edits.
   Retain recovery evidence after interruptions and failures.
-  Account staging resumes its own receipts and pending requests; mail, isolation, activation and other workflow journals remain pending.
+  Account staging resumes its own receipts and pending requests; target isolation retains resumable pause/release state.
+  Mail, source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.

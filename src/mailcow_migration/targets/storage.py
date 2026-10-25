@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Tuple
 
 from .mailcow import MailcowTarget
 from ..core.commands import run_command
@@ -20,18 +20,22 @@ class MailStorage:
         return {"container": self.container, "containerRoot": str(self.root), "uid": self.uid, "gid": self.gid}
 
 
-def inspect_mail_storage(target: MailcowTarget) -> MailStorage:
-    identifier = target.compose(("ps", "-q", "dovecot-mailcow")).stdout.strip()
+def inspect_container(target: MailcowTarget, service: str) -> Tuple[str, Mapping[str, Any]]:
+    identifier = target.compose(("ps", "-q", service)).stdout.strip()
     if not re.fullmatch(r"[0-9a-f]+", identifier):
-        raise MigrationError("Dovecot container is not running")
-    result = run_command(("docker", "inspect", identifier), cwd=Path(target.settings.directory), label="Dovecot container inspection")
+        raise MigrationError("{} container is not running".format(service))
+    result = run_command(("docker", "inspect", identifier), cwd=Path(target.settings.directory), label=service + " container inspection")
     try:
         inspection = decode_json(result.stdout)
     except (ValueError, UnicodeError) as error:
         raise MigrationError("Invalid Docker inspection response; contents omitted") from error
     if not isinstance(inspection, list) or not inspection or not isinstance(inspection[0], dict):
         raise MigrationError("Invalid Docker container inspection")
-    mounts = inspection[0].get("Mounts")
+    return identifier, inspection[0]
+
+
+def mail_volume_root(inspection: Mapping[str, Any]) -> Path:
+    mounts = inspection.get("Mounts")
     if not isinstance(mounts, list) or any(not isinstance(mount, dict) for mount in mounts):
         raise MigrationError("Invalid Dovecot mount inventory")
     mount = next((mount for mount in mounts if mount.get("Destination") == "/var/vmail"), None)
@@ -41,6 +45,12 @@ def inspect_mail_storage(target: MailcowTarget) -> MailStorage:
     root = Path(volume).resolve(strict=True)
     if not root.is_dir():
         raise MigrationError("Target mail volume is not a directory")
+    return root
+
+
+def inspect_mail_storage(target: MailcowTarget) -> MailStorage:
+    identifier, inspection = inspect_container(target, "dovecot-mailcow")
+    root = mail_volume_root(inspection)
     identity = []
     for flag in ("-u", "-g"):
         value = target.compose(("exec", "-T", "dovecot-mailcow", "id", flag, "vmail")).stdout.strip()

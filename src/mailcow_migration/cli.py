@@ -10,6 +10,7 @@ from .configuration import load_configuration
 from .core.errors import MigrationError
 from .exporting import run_export
 from .inspection import run_inspection
+from .isolation import run_target_isolation
 from .planning import run_plan
 from .wizard import configure
 
@@ -17,7 +18,7 @@ from .wizard import configure
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="mailcow-migrate", description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
-        epilog="Configuration, inspection, export, planning and inactive account staging are available. Mail transfer and activation remain pending.",
+        epilog="Preparation, account staging and target isolation are available. Source isolation, mail transfer and activation remain pending.",
     )
     result.add_argument("--version", action="version", version="%(prog)s " + __version__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -29,6 +30,7 @@ def parser() -> argparse.ArgumentParser:
         ("plan", "Plan accounts and quotas from a completed export and inspect Mailcow without changing mail services"),
         ("accounts", "Preview or stage inactive accounts from a completed saved plan"),
         ("verify", "Verify the account inventory of a saved staged batch without changing target accounts"),
+        ("target-isolation", "Preview, pause or check batch access and writers on Mailcow; retain guarded restoration state"),
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE", help="JSON configuration file")
@@ -40,10 +42,15 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
-        if name in ("accounts", "verify"):
+        if name in ("accounts", "verify", "target-isolation"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
+        if name == "target-isolation":
+            command.add_argument("--action", choices=("preview", "pause", "check", "release"), default="preview",
+                                 help="Defaults to read-only preview")
+            command.add_argument("--apply", action="store_true",
+                                 help="Required for pause/release; release requires completed activation and webmail import")
     return result
 
 
@@ -62,6 +69,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command in ("accounts", "verify"):
             return run_accounts(load_configuration(options.config), options.plan,
                                 apply=options.command == "accounts" and options.apply, verify=options.command == "verify")
+        elif options.command == "target-isolation":
+            return run_target_isolation(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
         else:
             load_configuration(options.config)
             print("Configuration is valid. Credential files and server connectivity have not been checked.")

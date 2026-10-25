@@ -3,7 +3,8 @@
 A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to an existing Mailcow installation.
 
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
-Message transfer, automated isolation, activation and full cutover are not implemented yet. This snapshot has not been validated end to end.
+Target isolation is available as a separate operation. Source isolation, message transfer, activation and full cutover remain pending.
+This snapshot has not been validated end to end.
 
 | Command | Available functionality |
 | --- | --- |
@@ -14,6 +15,7 @@ Message transfer, automated isolation, activation and full cutover are not imple
 | `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
 | `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
 | `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
+| `target-isolation` | Preview, pause and check Mailcow access, delivery and writers for a staged batch; retain guarded restoration state. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -217,7 +219,7 @@ records `target_verified: false` and `selection_recorded: false`: selection/excl
 privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-RoundCube data assessment, transfer execution, isolation, DNS handoff, delivery verification and journal-aware resume also remain pending.
+RoundCube data assessment, transfer execution, source isolation, DNS handoff, delivery verification and full migration resume also remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -261,6 +263,41 @@ sender permissions or delivery. Source isolation, message copying, activation an
 these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
 
+## Target isolation
+
+After account staging, preview Mailcow isolation using the same saved plan and configuration:
+
+```bash
+mailcow-migrate target-isolation --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+The default `preview` action reads inventories and prerequisites without changing target services or the isolation journal.
+It checks protocol controls, sync-job ownership, SOGo port exposure, Dovecot replication, nginx include support and delivery-map
+compatibility. Source isolation and the absence of remaining target writers are not established by this preview.
+
+`--action pause --apply` saves original protocol controls and sync-job activity, defers batch delivery through a persistent
+Postfix transport-map hold, and blocks batch SOGo resource paths through nginx. It drains old delivery/web workers, pauses
+batch sync jobs, terminates their identified imapsync processes, disables mailbox protocol access, clears authentication caches
+and disconnects sessions. Other domains' transport-map entries and saved protocol/job settings are retained.
+
+Completion requires readback of disabled access and jobs, no remaining batch sessions or imapsync workers, HTTP 503 responses
+from the SOGo guard, intact delivery guards, and no detected scheduled/open-file writers. Scheduled writers referring to the
+batch and jobs with unknown ownership stop the operation; shared jobs are not automatically disabled. A failure retains any
+changes already made and the recovery journal. Resume with the same pause command; `--action check` rechecks a completed pause
+without changing target services. These checks do not certify source isolation or discover every possible external writer.
+
+The private `target-isolation.json` journal binds backups and operation state to the plan, API origin and Mailcow directory.
+Configuration changes are recorded before atomic replacement while retaining existing owner/mode; interrupted route updates
+are reconciled only when the live file and effective route still match the saved before/after values. Shared Postfix snapshots
+are retained separately. Changed or unowned configuration blocks continuation. Keep the journal and backups with the batch.
+
+`--action release --apply` restores saved access, delivery and sync-job settings only after the matching account journal records
+completed activation and the webmail journal records completed import. The activation and webmail-import workflows are still
+pending in this pre-alpha, so a normally staged batch cannot yet pass the release guard. A pause therefore leaves the batch
+isolated until those workflows are available and completed; this command is not a complete pause/cutover/restore workflow.
+Initial isolation refuses activation in progress, a released batch or an interrupted release. Repairing webmail on an already
+activated batch and source isolation remain separate planned work. Isolation never copies mail or activates accounts.
+
 ## Package layout
 
 | Module | Responsibility |
@@ -270,6 +307,7 @@ account-journal formats are accepted. Keep other operation journals with the too
 | `exporting`, `sources.export` | Private source exports, inventory rechecks, completion manifests and file hashes. |
 | `planning`, `plans`, `sources.sql`, `sources.usage` | Account mapping, policy decisions, export validation and measured quotas. |
 | `accounts`, `plans.saved`, `targets.account_inventory`, `targets.reconciliation` | Saved-plan validation, inactive account staging, receipts and readback. |
+| `isolation`, `targets.isolation`, `targets.writers` | Target access/delivery isolation, writer checks, recovery journals and guarded restoration. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |

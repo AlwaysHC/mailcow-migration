@@ -11,7 +11,7 @@ from .core.storage import write_private_json
 from .plans.domain import MIB
 from .plans.forwarding import mailbox_forwardings
 from .plans.recovery import recovery_plan
-from .plans.saved import load_saved_plan
+from .plans.saved import SavedPlan, load_saved_plan
 from .targets.account_inventory import DOMAIN_FIELDS, account_conflicts, account_inventory, domain_value, native_route_conflicts
 from .targets.mailcow import MailcowTarget
 from .targets.passwords import verify_target_password
@@ -108,6 +108,12 @@ def verify_account_inventory(plan: Mapping[str, Any], inventory: Mapping[str, li
     verify_recovery_emails(recovery, inventory["mailbox"])
 
 
+def account_journal(batch: SavedPlan, configuration: Configuration) -> OperationJournal:
+    identity = {"version": 1, "kind": "mailcow-account-staging", "hash": batch.fingerprint,
+                "api": configuration.mailcow.api, "mailcow_directory": configuration.mailcow.directory}
+    return OperationJournal(Workspace(batch.directory), "state.json", identity)
+
+
 def run_accounts(configuration: Configuration, file: Path, *, apply: bool = False, verify: bool = False) -> int:
     if sys.platform != "linux" or os.geteuid() != 0:
         raise ConfigurationError("Run account staging on the Linux Mailcow host as root")
@@ -118,9 +124,7 @@ def run_accounts(configuration: Configuration, file: Path, *, apply: bool = Fals
         blockers = [row["detail"] for row in (*recovery["checks"], *forwarding["checks"]) if row["status"] == "blocked"]
         if blockers:
             raise MigrationError("Account mapping is blocked:\n" + "\n".join(blockers))
-        identity = {"version": 1, "kind": "mailcow-account-staging", "hash": batch.fingerprint,
-                    "api": configuration.mailcow.api, "mailcow_directory": configuration.mailcow.directory}
-        journal = OperationJournal(Workspace(batch.directory), "state.json", identity)
+        journal = account_journal(batch, configuration)
         state = journal.read()
         if not verify and (state.get("activated") or "enable domain for activation" in state["done"]):
             raise MigrationError("Account staging is forbidden after activation starts")

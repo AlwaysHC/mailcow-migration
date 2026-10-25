@@ -7,7 +7,8 @@ This document describes the initial environment requirements and the capabilitie
 It is not an end-to-end certification of the listed product versions.
 
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
-Message transfer, target webmail imports, isolation, activation and full recovery remain planned work. The configuration wizard writes versioned JSON that
+Target isolation is available separately. Message transfer, webmail imports, source isolation, activation and full recovery remain planned work.
+The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
 only to configured sources; an unconfigured server does not need to exist or be reachable.
@@ -40,6 +41,14 @@ Mailcow's domain quota field mapping, mailbox attributes, native alias behavior 
 Password reconciliation additionally requires Docker Compose and the running `php-fpm-mailcow` container with its application
 configuration, PDO database access, `hash_equals` and `verify_hash`. This read-only helper does not expose target password hashes.
 The account journal format supports resuming this application's staging operations, not arbitrary external migration journals.
+
+`target-isolation` requires completed account staging, root access on the Mailcow host, Docker Compose, readable host `/proc`
+and cron inventories, and running Postfix, Dovecot, nginx and SOGo containers. Dovecot needs `doveadm` and Python 3 for identifying
+running imapsync processes. The Mailcow API must expose all seven mailbox protocol controls and valid sync-job ownership/activity.
+Pause/release additionally need API writes and writable Postfix/nginx configuration directories. Postfix service overrides of
+`transport_maps`, Dovecot replication and non-loopback published SOGo ports block the supported isolation path.
+nginx must load `/etc/nginx/conf.d/site.*.custom`; HTTPS checks retain certificate verification and refuse redirects.
+Restoration remains gated on completed activation and webmail import, whose workflows are not available in this snapshot.
 
 ## Initial compatibility matrix
 
