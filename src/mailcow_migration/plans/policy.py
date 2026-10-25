@@ -131,7 +131,6 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
     checks.extend(shared_settings["checks"])
     checks.extend(check(identifier, "pending", detail) for identifier, detail in (
         ("webmail-data", "RoundCube preservation and SOGo import assessment are not implemented yet"),
-        ("storage-transfer", "Mail volume mounts, ownership, capacity and transfer capability checks are not implemented yet"),
         ("cutover-resume", "Isolation, migration journals, DNS handoff and delivery verification are not implemented yet"),
     ))
     return {"checks": checks, "admins": admins, "recovery": recovery, "forwardings": forwardings,

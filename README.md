@@ -148,12 +148,25 @@ By default it checks source inventory, measures Maildirs over SSH using the bund
 Quota calculation preserves source finite limits, configured headroom/minimums and conservative CRLF sizing, including compressed
 messages with supported metadata. Unknown compression without usable metadata stops sizing. Mapping blockers skip sizing and mark
 quotas provisional. PostfixAdmin also accepts the `--quota-mib N` override, which skips source contact and measurement;
-the configured headroom/minimums are not used in that mode. Target checks still run. Plesk always uses measured quotas.
+the configured headroom/minimums are not used in that mode. Target checks still run, while source transfer checks remain pending.
+Plesk always uses measured quotas.
 
 Read-only target checks cover local prerequisites, Docker Compose, running Dovecot/Postfix services,
 `MAILDIR_SUB=Maildir`, and API domain/mailbox/alias/BCC inventories. An existing primary domain is reusable only when empty,
 with no relevant alias-domain, alias or BCC dependencies. Its proposed setting changes are recorded. Conflicting existing
 objects remain blocked; an earlier batch must be recovered using its original plan and journal, never adopted by name alone.
+
+Storage inspection resolves the Dovecot container's `/var/vmail` mount and reads the `vmail` UID/GID used for copying.
+Mailbox destinations must stay below that resolved volume and have safe directory ancestors. For batches containing mailboxes,
+the receiver's rsync options are checked independently of the source sender options; ownership and progress options are not
+required on the sender. Normal measured planning also verifies current source Maildirs and binds their location to the source
+used for quota calculation. Fixed-quota planning and plans with source mapping blockers defer source transfer checks.
+
+For existing target Maildirs, a checksum dry run checks append compatibility with the transfer exclusions for Dovecot indexes,
+`maildirsize` and temporary messages. Different existing contents or file types, symlinks, unsupported paths and message filename
+IDs found under another folder or flag name are blockers. Dovecot UID/keyword metadata conflicts require a mailbox-aware merge.
+Missing target directories are reported for later creation. No mailbox directories or messages are created, replaced or removed.
+These comparisons can take time on populated mailboxes; inventories are kept in private temporary files and removed after inspection.
 
 The configured policy supplies administrator names and batch-only ALL grants, explicitly reviewed administrator merges,
 sender permissions, and the source password-expiration decision. Recovery email/phone, fetchmail, inactive Sieve, and mailbox
@@ -188,7 +201,7 @@ cleanup services and external filters. It distinguishes disabled authentication,
 checks and unresolved evidence. It never derives broad send-as grants from those findings; `senderPermissions` still requires
 explicit batch users and addresses. Plesk planning does not import PostfixAdmin shared settings or assume missing sender evidence.
 
-The new directory contains `plan.json`, `account-policy.json`, `webmail-plan.json`, `shared-settings-plan.json`, `policy.json`,
+The new directory contains `plan.json`, `account-policy.json`, `webmail-plan.json`, `shared-settings-plan.json`, `transfer-plan.json`, `policy.json`,
 `assessment.json`, `summary.txt`, `users.txt`, `domains.json`, measurement diagnostics when present, and a completion manifest.
 Directories use mode 700 and files mode 600. Full shared-setting values and per-service details stay in the private report.
 Its `automatic` classification means a supported mapping is known; no change has been selected, applied or verified.
@@ -199,8 +212,10 @@ Exit status 1 reports blockers or unresolved policy decisions; 0 means planning 
 `webmail-plan.json` records proposed source mappings and `target_verified: false`. Target Sieve compilation, SOGo capability
 and conflict checks, container timezone agreement and actual import verification remain pending. The shared-settings report
 records `target_verified: false` and `selection_recorded: false`: selection/exclusion review, relay credentials, server administrator
-privileges, shared-setting application and target verification remain pending. RoundCube data assessment, storage/transfer readiness,
-isolation, DNS handoff, delivery verification and journal-aware resume also remain pending. These are explicitly reported as pending.
+privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
+capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
+activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
+RoundCube data assessment, transfer execution, isolation, DNS handoff, delivery verification and journal-aware resume also remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -215,6 +230,7 @@ their assessment. Planning does not resume an existing migration batch; retain i
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |
+| `targets.storage`, `plans.transfer`, `sources.maildirs` | Mail volume and identity discovery, source paths, rsync capabilities and append previews. |
 | `core.commands`, `core.ssh` | Command execution, timeouts, private diagnostics, and SSH/SCP/rsync arguments. |
 | `core.storage`, `core.state` | Private JSON files, a shared operation lock, identity checks, and mutation journals. |
 | `sources` | Source connections, inspection and domain account/configuration export adapters. |

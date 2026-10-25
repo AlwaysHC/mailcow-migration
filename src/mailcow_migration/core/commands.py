@@ -1,13 +1,15 @@
 import json
 import logging
+import os
 import subprocess
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import BinaryIO, Mapping, Optional, Sequence, Union
 from urllib.parse import quote
 
 from .errors import MigrationError
-from .storage import write_private_text
+from .storage import local_path, private_directory, write_private_text
 
 LOGGER = logging.getLogger("mailcow_migration")
 
@@ -31,24 +33,35 @@ def run_command(
     timeout: float = 120, label: Optional[str] = None, private_output: bool = True,
     secrets: Sequence[str] = (), allowed_codes: Sequence[int] = (0,),
     diagnostic_file: Optional[Path] = None,
+    stdout_file: Optional[Path] = None, environment: Optional[Mapping[str, str]] = None,
 ) -> CommandResult:
     if not arguments or isinstance(arguments, (str, bytes)) or timeout <= 0:
         raise MigrationError("A command argument sequence and positive timeout are required")
     name = label or Path(arguments[0]).name
     LOGGER.debug("Running %s", name)
     try:
-        process = subprocess.run(
-            tuple(arguments), input=input_text, stdin=subprocess.DEVNULL if input_text is None else None,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, timeout=timeout,
-            encoding="utf-8", check=False,
-        )
+        with ExitStack() as stack:
+            output: Union[int, BinaryIO] = subprocess.PIPE
+            if stdout_file is not None:
+                if os.name != "posix":
+                    raise MigrationError("Private command output files require a POSIX host")
+                destination = local_path(stdout_file)
+                private_directory(destination.parent)
+                descriptor = os.open(str(destination), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                output = stack.enter_context(os.fdopen(descriptor, "wb"))
+            process = subprocess.run(
+                tuple(arguments), input=input_text, stdin=subprocess.DEVNULL if input_text is None else None,
+                stdout=output, stderr=subprocess.PIPE, cwd=cwd, timeout=timeout,
+                env={**os.environ, **environment} if environment is not None else None,
+                encoding="utf-8", check=False,
+            )
     except subprocess.TimeoutExpired as error:
         raise MigrationError("{} timed out after {} seconds; inspect its state before repeating changes".format(name, timeout)) from error
     except OSError as error:
         raise MigrationError("Cannot run {}: {}".format(name, error.strerror)) from error
     except UnicodeError as error:
         raise MigrationError("{} returned invalid UTF-8 output; contents omitted".format(name)) from error
-    result = CommandResult(process.returncode, process.stdout, process.stderr)
+    result = CommandResult(process.returncode, process.stdout if stdout_file is None else "", process.stderr)
     if result.stderr:
         if diagnostic_file is not None:
             write_private_text(diagnostic_file, result.stderr)

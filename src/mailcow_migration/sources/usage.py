@@ -1,13 +1,12 @@
 import math
 import re
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Mapping
 
-from . import SourceKind
 from .inventory import SourceInspection
+from .maildirs import mailbox_path, source_identity
 from ..configuration import MigrationConfiguration
-from ..core.domain import domain_name
 from ..core.errors import MigrationError
 from ..plans.domain import MIB, QUOTA_LIMIT, SAFE_INTEGER, number
 from ..resources import read_resource
@@ -33,13 +32,7 @@ def measure_source(
     mailboxes = []
     for index, row in enumerate(plan["mailboxes"]):
         payload = row["payload"]
-        domain_name(payload["domain"])
-        local = payload["local_part"]
-        if not re.fullmatch(r"[a-zA-Z0-9_+.-]+", local) or local in (".", ".."):
-            raise MigrationError("Mailbox path is unsupported for direct SSH copying; review its local part")
-        path = PurePosixPath(source.inventory.mail_root, payload["domain"], local)
-        if source.connection.kind is SourceKind.PLESK:
-            path /= "Maildir"
+        path = mailbox_path(source, payload["domain"], payload["local_part"])
         print("Measuring {}, including compressed messages...".format(row["username"]))
         result = source.connection.ssh.run(
             ("bash", "-s", "--", str(path), row["username"], "0"), input_text=script, timeout=86400,
@@ -57,8 +50,7 @@ def measure_source(
         quota = usage_quota(usage, source_mailbox["quota"], policy)
         mailboxes.append({"username": row["username"], **usage, "quota": quota})
         print("  {} messages; {:.2f} MiB; quota {} MiB.".format(usage["messages"], usage["bytes"] / MIB, quota))
-    return {"source": {"host": source.connection.ssh.host, "root": source.inventory.mail_root,
-                       **({"subdir": "Maildir"} if source.connection.kind is SourceKind.PLESK else {})},
+    return {"source": source_identity(source),
             "measuredAt": datetime.now(timezone.utc).isoformat(), "policy": policy, "mailboxes": mailboxes}
 
 

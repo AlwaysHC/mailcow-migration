@@ -14,8 +14,9 @@ only to configured sources; an unconfigured server does not need to exist or be 
 The `inspect` command uses local OpenSSH and `dig`, remote Bash/`hostname -I` and filesystem access, plus the PostfixAdmin
 MySQL client or Plesk Python/CLI database access. It checks source inventories and current authoritative DNS routing;
 full prerequisite assessment and migration-resume checks remain planned work.
-`plan` provides initial target prerequisites and domain/mailbox/alias/BCC conflict checks; this does not establish
-storage/transfer readiness, full migration compatibility or journal-aware resume. It uses completed exports, parses source
+`plan` provides initial target prerequisites, domain/mailbox/alias/BCC conflicts, mail volume and vmail identity inspection,
+rsync capability checks and read-only append previews. This does not authorize transfer or establish journal-aware resume.
+It uses completed exports, parses source
 account data and calculates quotas from mailbox measurements. It also assesses source Sieve, vacation and forwarding mappings.
 PostfixAdmin planning assesses shared routing/policy maps and per-service sender restrictions from the exported configuration.
 It does not resume existing migration journals, verify shared-setting application or establish target webmail readiness.
@@ -23,7 +24,11 @@ The `export` command additionally uses local `scp -O` for PostfixAdmin and the e
 utilities; Plesk export uses its root-only Python/CLI snapshot reader. Only the matching source is exported. Export success
 does not qualify account mappings or product versions, and migration-resume support is still pending.
 Default planning also requires the source sizing helper's Bash/find/mktemp/od/gzip/wc/rm/awk commands, and checks current source
-inventory before and after sizing. Its PostfixAdmin `--quota-mib` override skips source measurement; the live target is still checked.
+inventory before and after sizing. Its PostfixAdmin `--quota-mib` override skips source measurement and source transfer checks;
+the live target and local receiver capabilities are still checked. Transfer checks require readable host access to the actual
+Dovecot mail-volume mount and a positive numeric vmail UID/GID. Sender rsync options remain separate from receiver-only
+ownership and progress capabilities. No mailbox files are changed by the checksum preview; actual copying still requires
+staged accounts, matching journals, source/target write isolation and a pre-activation state.
 PostfixAdmin vacation assessment uses the host's IANA timezone data, normally under `/usr/share/zoneinfo` (`TZDIR` may select
 the system data directory). The bundled Python helper resolves date parts in a separate process, retaining Python 3.8 support
 without changing the CLI process timezone or adding a runtime package. Unknown zones and missing timezone data stop planning.

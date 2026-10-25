@@ -59,7 +59,8 @@ Configuration generation is available in the current development version.
 - [ ] **Preserve:** Produce a reviewable plan and assessment showing proposed changes, conflicts, unsupported data,
   source/target identity, and operator decisions. Preview must not modify either mail service.
   Account, source webmail, shared source settings and sender-policy assessments are implemented.
-  Target webmail verification, shared-setting application, storage/transfer and cutover/resume remain pending.
+  Mail storage, rsync capabilities and read-only append previews are implemented.
+  Target webmail verification, shared-setting application, transfer execution and cutover/resume remain pending.
 
 ## Accounts and messages
 
@@ -72,6 +73,9 @@ Configuration generation is available in the current development version.
   Verify target scheme support and block malformed, truncated, or unmapped credentials.
 - [ ] **Configure:** Preserve mailbox forwarding destinations and keep-copy behavior. Account for personal-filter ordering;
   the current Plesk path blocks forwarding combined with personal Sieve until an ordering adapter exists.
+- [x] Inspect the target mail volume and vmail identity, validate mailbox paths, and probe sender/receiver transfer capabilities separately.
+  Compare existing Maildirs with checksum dry runs, retaining file-type/content and alternate-message-path blockers.
+  Keep source checks pending with fixed quotas or source mapping blockers, and retain staging/isolation/journal guards before actual copying.
 - [ ] **Preserve:** Copy Maildir messages and supported metadata with append-only rsync, preserving existing target files.
   Conflicting content, unsafe links, source changes, and unaccounted writers must stop copying or activation.
   Include final verification and target quota recalculation.

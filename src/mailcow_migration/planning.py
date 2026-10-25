@@ -18,6 +18,7 @@ from .plans.domain import MIB, QUOTA_LIMIT, active, build_plan, number
 from .plans.evidence import ExportEvidence, load_export
 from .plans.plesk import plesk_plan
 from .plans.policy import load_policy, policy_plan
+from .plans.transfer import transfer_assessment
 from .sources import SourceKind
 from .sources.inventory import inspect_source
 from .sources.sql import parse_sql
@@ -54,7 +55,9 @@ def validate_plan_inventory(plan: Mapping[str, Any], evidence: ExportEvidence) -
         raise MigrationError("Exported account plan differs from its inspected domain inventory; export the current source again")
 
 
-def planning_summary(plan: Mapping[str, Any], assessment: Mapping[str, Any], account_policy: Mapping[str, Any]) -> str:
+def planning_summary(
+    plan: Mapping[str, Any], assessment: Mapping[str, Any], account_policy: Mapping[str, Any], transfer: Mapping[str, Any],
+) -> str:
     target = assessment["target"]
     lines = [
         "Domain: " + plan["domain"],
@@ -95,6 +98,10 @@ def planning_summary(plan: Mapping[str, Any], assessment: Mapping[str, Any], acc
                   "  {} supported mappings; {} unsupported; {} blockers; {} informational".format(
                       counts["automatic"], counts["unsupported"], counts["blocker"], counts["adapted"]),
                   "  Source values, domain relationships and per-service sender findings: shared-settings-plan.json"))
+    storage = transfer["storage"]
+    lines.extend(("", "Mail storage and transfer preview (no files copied):",
+                  "  Mail volume: {}; vmail identity {}:{}".format(storage["containerRoot"], storage["uid"], storage["gid"]),
+                  "  {} mailbox records; detailed findings in transfer-plan.json".format(len(transfer["mailboxes"]))))
     lines.extend(("", "Assessment:"))
     lines.extend("  [{}] {}: {}".format(row["status"], row["id"], row["detail"]) for row in assessment["checks"])
     lines.extend("  " + reason for reason in target["conflicts"]["reasons"])
@@ -149,24 +156,29 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
             if plan["domainPayload"]["quota"] > QUOTA_LIMIT:
                 checks.append(check("domain-quota", "blocked", "Calculated domain quota is too large"))
             print("Checking Mailcow services and existing account inventories...")
-            target = target_assessment(plan, MailcowTarget(configuration.mailcow), account_policy, policy)
+            mailcow = MailcowTarget(configuration.mailcow)
+            target = target_assessment(plan, mailcow, account_policy, policy)
+            print("Inspecting mail storage and read-only transfer prerequisites...")
+            transfer = transfer_assessment(plan, evidence.source, mailcow, destination, source_checks=quota_mode == "measured")
             evidence.verify()
-            checks.extend([*account_policy["checks"], *target["checks"]])
+            checks.extend([*account_policy["checks"], *target["checks"], *transfer["checks"]])
             encoded = json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
             assessment = {"version": 1, "kind": "account-planning-assessment", "checked_at": datetime.now(timezone.utc).isoformat(),
                           "plan_sha256": hashlib.sha256(encoded).hexdigest(), "migration_ready": False,
                           "quotaMode": quota_mode, "checks": checks, "target": target,
-                          "webmail_plan": "webmail-plan.json", "shared_settings_plan": "shared-settings-plan.json"}
+                          "webmail_plan": "webmail-plan.json", "shared_settings_plan": "shared-settings-plan.json",
+                          "transfer_plan": "transfer-plan.json"}
             write_private_json(destination / "plan.json", plan)
             write_private_json(destination / "policy.json", policy)
             reports = {"webmail": "webmail-plan.json", "sharedSettings": "shared-settings-plan.json"}
             write_private_json(destination / "account-policy.json", {key: value for key, value in account_policy.items() if key not in reports})
             for key, file in reports.items():
                 write_private_json(destination / file, account_policy[key])
+            write_private_json(destination / "transfer-plan.json", transfer)
             write_private_json(destination / "assessment.json", assessment)
             write_private_json(destination / "domains.json", plan["domains"])
             write_private_text(destination / "users.txt", "\n".join(row["username"] for row in plan["mailboxes"]) + "\n")
-            summary = planning_summary(plan, assessment, account_policy)
+            summary = planning_summary(plan, assessment, account_policy, transfer)
             write_private_text(destination / "summary.txt", summary)
             write_private_json(destination / "manifest.json", {**provenance, "complete": True,
                                "completed_at": datetime.now(timezone.utc).isoformat(), "plan_sha256": assessment["plan_sha256"]}, replace=True)
