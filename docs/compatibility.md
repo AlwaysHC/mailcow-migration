@@ -9,7 +9,7 @@ It is not an end-to-end certification of the listed product versions.
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available separately.
 RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
-SOGo configuration preparation and native user-data conflict inspection are available separately from import.
+SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
 Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -132,6 +132,13 @@ permission to restart SOGo and `nc` in the container for its startup check. Nati
 and working per-user backups; inactive staging alone does not prove those prerequisites. Property-list output uses the supported
 GNUstep representation, including Unicode escapes, and is parsed before applying a proposed configuration change.
 No preview or native inspection clears cached user lookups, refreshes sources, imports user data or grants address-book ownership.
+
+Native user inspection rechecks the saved RoundCube snapshot and source folder trees through the configured SSH/PHP connection.
+For profiles with folder display state, it also requires `doveadm`, `doveconf` and, when deriving an unset separator, `dovecot`
+inside `dovecot-mailcow`. The supported personal namespace has an empty prefix and a `.` or `/` hierarchy separator; every
+source folder must already exist on the target. SOGo backups must contain a user-settings dictionary, with a dictionary-valued
+`Mail` entry when present. `ExpandedFolders`, when present, must be an array or JSON-encoded array of supported account/folder
+identifiers with the expected primary-account selection. Folder checks establish display-state compatibility only.
 
 | Container | Capabilities needed by planned migration workflows |
 | --- | --- |

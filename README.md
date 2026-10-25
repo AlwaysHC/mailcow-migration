@@ -5,7 +5,7 @@ A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
-SOGo target preparation can check/configure custom identity support and inspect existing user-data conflicts.
+SOGo target preparation can check/configure custom identity support, inspect existing user-data conflicts and assess target folder display state.
 Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -22,7 +22,7 @@ This snapshot has not been validated end to end.
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
-| `sogo-target` | Preview/apply required identity configuration, check effective settings, and inspect native user-data conflicts. |
+| `sogo-target` | Preview/apply required identity configuration, check effective settings, and inspect native data/folder-state conflicts. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -377,15 +377,28 @@ Backups, previews and diagnostics are private under `sogo-target` in the batch d
 checks, and refuse an unfinished SOGo configuration/restart. Source login release remains available if target preparation fails.
 This configuration step does not import identities, preferences or contacts.
 
-`--action inspect-users` reads native SOGo backups as the `sogo` user once the domain's user sources are available. The first
+`--action inspect-users` rechecks the approved source snapshot and source folder trees, then reads native SOGo backups as the
+`sogo` user once the domain's user sources are available. The first
 private backup for each user is retained. Failed native operations retain their private temporary directory inside the container
 for diagnosis. Existing preference differences are saved in private conflict reports; comparison normalizes only the supported
 boolean flags, preserving names, signatures, missing fields and identity/filter ordering.
 
+For profiles with saved folder display state, inspection also reads the target Dovecot folder tree. Every source folder must be
+present on Mailcow, including parent folders. The proposal maps collapsed folders to SOGo's primary-account identifiers and
+expands the remaining target folders, including any additional target folders. It preserves modified UTF-7 names and the
+supported namespace/separator rules. Missing folders block the assessment until mail has been copied.
+
+Existing `Mail.ExpandedFolders` values are accepted as arrays or JSON-encoded arrays and compared as sets for the primary
+account. A different primary-account selection or malformed settings block the assessment; unrelated Mail settings and
+other accounts' folder identifiers are retained in the proposed value. Equivalent existing selections need no write.
+The private user assessment records the target tree, proposed Mail settings and whether a later write would be required.
+It does not create folders or establish that messages have been transferred. Recheck source/target trees and native settings
+under isolation before a future import; this assessment is not an import receipt.
+
 An existing destination address book without this application's import journal is a conflict, even if its contents appear to
 match. Native inspection never adopts that book or overwrites conflicting data. Missing user sources or failed user lookups
 are reported; source refresh/cache reconciliation remains part of the pending import workflow. Configuration/user assessments
-retain `import_ready: false`; target folder verification, actual SOGo imports, final readback and activation remain pending.
+retain `import_ready: false`; actual SOGo imports, final readback and activation remain pending.
 
 ## PostfixAdmin source logins
 
@@ -525,7 +538,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
-| `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory` | SOGo configuration preview/application, native backups and conflict inspection. |
+| `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration, native backups and data/folder conflict inspection. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

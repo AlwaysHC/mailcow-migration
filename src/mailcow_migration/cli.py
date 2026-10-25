@@ -76,7 +76,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--accept-deferrals", action="store_true", help="Explicitly defer the listed receipt/reply-folder preferences")
         if name == "sogo-target":
             command.add_argument("--action", choices=("preview", "configure", "check", "inspect-users"), default="preview",
-                                 help="Defaults to configuration preview; inspect-users reads native backups and checks conflicts")
+                                 help="Defaults to configuration preview; inspect-users checks native data conflicts and target folder state")
             command.add_argument("--apply", action="store_true",
                                  help="Apply the previewed shared identity setting and restart SOGo; briefly interrupts all webmail/DAV domains")
     return result

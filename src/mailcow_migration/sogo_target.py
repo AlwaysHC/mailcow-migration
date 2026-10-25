@@ -14,9 +14,12 @@ from .targets.sogo import SogoTarget, missing_user_sources
 from .targets.sogo_preparation import SogoPreparation
 
 
-def sogo_preparation(configuration: Configuration, batch: SavedPlan) -> SogoPreparation:
+def sogo_preparation(configuration: Configuration, batch: SavedPlan, *, verify_source: bool = False) -> SogoPreparation:
     sessions = roundcube_sessions(batch, configuration)
-    proposal = sessions.proposal(sessions.approved_record())
+    record = sessions.approved_record()
+    if verify_source:
+        sessions.check_source(record)
+    proposal = sessions.proposal(record)
     directory = local_path(batch.directory / "sogo-target")
     return SogoPreparation(SogoTarget(MailcowTarget(configuration.mailcow), directory), batch, proposal)
 
@@ -28,7 +31,7 @@ def run_sogo_target(configuration: Configuration, file: Path, *, action: str = "
         raise ConfigurationError("Use --apply only with configure; other SOGo target actions do not change configuration or user data")
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
-        prepared = sogo_preparation(configuration, batch)
+        prepared = sogo_preparation(configuration, batch, verify_source=action == "inspect-users")
         if action == "preview":
             report = prepared.preview()
             for blocker in report.get("blockers", []):

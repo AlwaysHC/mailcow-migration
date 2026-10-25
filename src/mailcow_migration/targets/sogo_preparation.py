@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 
 from .sogo import SogoTarget, configuration_blockers, missing_custom_from, missing_user_sources
+from .sogo_folders import inspect_folder_state
 from .sogo_inventory import check_book, check_preferences
 from .sogo_values import configuration_value, enabled, property_list
 from ..core.errors import MigrationError
@@ -175,16 +176,19 @@ class SogoPreparation:
                 backup = self.target.backup(user["username"])
                 current = check_preferences(backup, user, self.target.directory)
                 check_book(backup, user["username"], user["book"], user["records"], owned=False)
+                folders = inspect_folder_state(self.target.target, self.target.directory, user, backup)
                 results.append({"username": user["username"], "status": "verified",
-                                "preferences_missing": [key for key in user["preferences"] if key not in current]})
-                print(user["username"] + ": existing preferences and destination address book passed conflict checks.")
+                                "preferences_missing": [key for key in user["preferences"] if key not in current], "folder_state": folders})
+                print(user["username"] + ": existing preferences, destination address book and applicable folder state passed checks.")
             except MigrationError as error:
                 results.append({"username": user["username"], "status": "blocked", "detail": str(error)})
                 print(user["username"] + ": " + str(error))
+        verified = all(row["status"] == "verified" for row in results)
         report = {"version": 1, "kind": "sogo-user-assessment", **self.identity,
                   "proposal_sha256": json_fingerprint(self.proposal, canonical=True), "users": results,
-                  "import_ready": False, "target_folder_verification": False}
+                  "import_ready": False, "target_folder_verification": verified,
+                  "folder_users_checked": sum(row.get("folder_state") is not None for row in results)}
         write_private_json(self.file("user-assessment.json"), report, replace=True)
         print("Private user assessment: {}. No user preferences or address books were changed.".format(self.file("user-assessment.json")))
-        print("Target folder verification, actual import and final readback remain pending.")
-        return all(row["status"] == "verified" for row in results)
+        print("Folder settings are proposed only; user-data import and final readback remain pending.")
+        return verified
