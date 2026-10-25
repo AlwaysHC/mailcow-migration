@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "postfixadmin": {
+    "source": "root@postfixadmin.example.org",
+    "source_mail_root": "/var/posta",
+    "mysql_option_file": "/root/migration-mysql.cnf",
+    "roundcube_directory": null,
+    "ssh_config": null
+  },
+  "mailcow": {
+    "directory": "/opt/mailcow-dockerized",
+    "api": "https://mailcow.example.org",
+    "api_key_file": "/root/mailcow-in-progress/credentials/mailcow-api.key"
+  },
+  "migration": {
+    "quota_headroom_percent": 20,
+    "quota_min_mib": 1024,
+    "policy_file": null,
+    "quarantine_notification": "weekly",
+    "quarantine_category": "add_header"
+  }
+}

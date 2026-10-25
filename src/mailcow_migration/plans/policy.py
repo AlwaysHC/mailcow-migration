@@ -1,0 +1,145 @@
+import ipaddress
+import re
+from pathlib import Path
+from typing import Any, Mapping, Optional
+
+from .domain import active, address, destinations
+from .evidence import ExportEvidence
+from ..core.errors import ConfigurationError, MigrationError
+from ..core.storage import read_json, read_text
+from ..sources import SourceKind
+
+
+def load_policy(file: Optional[str]) -> Mapping[str, Any]:
+    policy = read_json(Path(file), private=True) if file else {}
+    allowed = {"adminNames", "allDomainAdmins", "mergeAdmins", "vacationZeroIntervalDays", "vacationDatesAreUtc",
+               "mailcowIp", "senderPermissions", "sourcePasswordExpiration", "vacationTimeZone"}
+    if not isinstance(policy, dict) or set(policy) - allowed:
+        raise ConfigurationError("Unknown settings policy field; use settings-policy.example.json")
+    for name, choices in (("allDomainAdmins", ("review", "batch-only")), ("sourcePasswordExpiration", ("disabled", "enabled", "review"))):
+        if name in policy and policy[name] not in choices:
+            raise ConfigurationError("{} must be {}".format(name, ", ".join(choices)))
+    names = policy.get("adminNames", {})
+    if not isinstance(names, dict) or any(not isinstance(value, str) or not value for value in names.values()):
+        raise ConfigurationError("adminNames must map source names to nonempty target names")
+    merges = policy.get("mergeAdmins", [])
+    if not isinstance(merges, list) or any(not isinstance(name, str) for name in merges):
+        raise ConfigurationError("mergeAdmins must contain explicitly reviewed target administrator names")
+    if "vacationDatesAreUtc" in policy and type(policy["vacationDatesAreUtc"]) is not bool:
+        raise ConfigurationError("vacationDatesAreUtc must be boolean")
+    interval = policy.get("vacationZeroIntervalDays")
+    if interval is not None and (type(interval) is not int or not 1 <= interval <= 30):
+        raise ConfigurationError("vacationZeroIntervalDays must be null or a reviewed integer from 1 to 30")
+    zone = policy.get("vacationTimeZone", "Europe/Rome")
+    if not isinstance(zone, str) or not zone:
+        raise ConfigurationError("vacationTimeZone must be a nonempty timezone name; native vacation assessment validates its mapping")
+    if "mailcowIp" in policy:
+        try:
+            if not isinstance(policy["mailcowIp"], str):
+                raise ValueError("Expected IP address text")
+            ipaddress.ip_address(policy["mailcowIp"])
+        except ValueError as error:
+            raise ConfigurationError("mailcowIp must be a fixed IP address") from error
+    senders = policy.get("senderPermissions", {})
+    if (not isinstance(senders, dict) or any(not isinstance(items, list) or any(not isinstance(item, str) for item in items)
+                                           for items in senders.values())):
+        raise ConfigurationError("senderPermissions must map users to address lists")
+    return {"sourcePasswordExpiration": "disabled", "vacationTimeZone": "Europe/Rome", **policy}
+
+
+def administrator_name(username: str, policy: Mapping[str, Any]) -> str:
+    if username in policy.get("adminNames", {}):
+        return policy["adminNames"][username]
+    return username.replace("@", ".").lower() if re.fullmatch(r"[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+", username) else username
+
+
+def check(identifier: str, status: str, detail: str) -> Mapping[str, str]:
+    return {"id": identifier, "status": status, "detail": detail}
+
+
+def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mapping[str, Any]) -> Mapping[str, Any]:
+    checks, admins, recovery, forwardings = [], [], [], []
+    source = plan["source"]
+    for row in plan["aliases"]:
+        if not row["mailbox"]:
+            continue
+        mailbox = next((item for item in plan["mailboxes"] if item["username"] == row["address"]), None)
+        targets = list(dict.fromkeys(destinations(row["payload"].get("goto", ""))))
+        keep_local = not row["payload"].get("goto_null") and row["address"] in targets
+        if mailbox is None or not keep_local or row["active"] != mailbox["active"]:
+            checks.append(check("mailbox-forwarding:" + row["address"], "blocked",
+                                "Automatic mailbox forwarding requires a local copy and matching mailbox/alias activity; source rule retained."))
+        else:
+            forwarded = [target for target in targets if target != row["address"]]
+            if forwarded:
+                forwardings.append({"username": row["address"], "destinations": forwarded, "active": row["active"], "keepLocal": True})
+    if evidence.source.connection.kind is SourceKind.PLESK:
+        snapshot = read_json(evidence.data / "source.json", private=True)
+        forwardings.extend({"username": row["username"], "destinations": [item.lower() for item in row["destinations"]],
+                            "active": 1, "keepLocal": row["delivery"], "method": "personal-sieve"}
+                           for row in snapshot["accounts"] if row["mailbox"] and row["forwarding"])
+    for row in source["admins"]:
+        if active(row.get("superadmin")):
+            continue
+        bindings = [item for item in source["bindings"] if item["username"] == row["username"]]
+        if not bindings:
+            continue
+        grants = [item for item in bindings if active(item["active"])]
+        identifier = "admin:" + row["username"]
+        if not grants:
+            checks.append(check(identifier, "not-needed", "No active memberships; source records remain archived"))
+            continue
+        primary = any(item["domain"] == plan["domain"] for item in grants)
+        all_domains = any(item["domain"] == "ALL" for item in grants)
+        if not primary and all_domains and policy.get("allDomainAdmins") != "batch-only":
+            checks.append(check(identifier, "decision", "ALL grant: choose batch-only in policy to grant only this primary domain"))
+            continue
+        if not primary and not all_domains:
+            checks.append(check(identifier, "decision", "Alias-domain-only membership cannot be silently widened to its primary domain"))
+            continue
+        username = administrator_name(row["username"], policy)
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", username) or username == "API":
+            checks.append(check(identifier, "decision", "Target requires an administrator name mapping in adminNames"))
+            continue
+        admins.append({"username": username, "domains": [plan["domain"]], "active": active(row["active"])})
+        checks.append(check(identifier, "planned", "Administrator login: {} -> {}; use new admin passwords after activation".format(
+            row["username"], username)))
+    if len({row["username"].lower() for row in admins}) != len(admins):
+        raise MigrationError("Administrator name mappings collide; choose distinct names in adminNames")
+    for row in source["mailboxes"]:
+        username, email, phone = row["username"], str(row.get("email_other") or "").strip(), str(row.get("phone") or "").strip()
+        if phone:
+            checks.append(check("recovery:" + username, "blocked", "Mailcow supports recovery email, not phone/SMS recovery"))
+        if email and (not address(email.lower()) or email.lower() == username.lower()):
+            checks.append(check("recovery:" + username, "blocked", "Invalid or self-referencing recovery email; correct the source value"))
+        if (email or phone) and not any(item["username"] == username for item in plan["mailboxes"]):
+            checks.append(check("recovery:" + username, "blocked", "Recovery contact has no target mailbox"))
+        if email:
+            recovery.append({"username": username, "email": email, "operation": "import recovery email " + username})
+    checks.append(check("fetchmail", "blocked" if source["fetchmail"] else "not-needed",
+                        "Fetchmail jobs, including disabled jobs, require a supported native mapping" if source["fetchmail"]
+                        else "No fetchmail jobs to migrate"))
+    expiration = policy["sourcePasswordExpiration"]
+    checks.append(check("password-expiration", "not-needed" if expiration == "disabled" else "blocked",
+                        "Source password expiration is disabled under the existing policy" if expiration == "disabled" else
+                        "Mailcow has no native dated/recurring password expiration; force_pw_update is not equivalent" if expiration == "enabled" else
+                        "Confirm whether the source actually enforces password expiration; database dates do not establish this"))
+    if evidence.source.connection.kind is SourceKind.POSTFIXADMIN:
+        inactive = read_text(evidence.data / "config" / "inactive-sieve.files", private=True).split("\0")
+        checks.extend(check("inactive-sieve", "blocked", "Inactive Sieve script has no editable SOGo mapping: " + file)
+                      for file in inactive if file)
+    users = {row["username"] for row in plan["mailboxes"]}
+    addresses = users | {row["address"] for row in plan["aliases"] if not row["address"].startswith("@")}
+    permissions = []
+    for username, senders in policy.get("senderPermissions", {}).items():
+        if username not in users or any(sender not in addresses for sender in senders):
+            raise MigrationError("Sender permissions must name real batch users and explicit batch mailbox/alias addresses; no wildcards")
+        permissions.append({"username": username, "senders": sorted(set(senders))})
+    checks.extend(check(identifier, "pending", detail) for identifier, detail in (
+        ("native-webmail-settings", "Sieve conversion, vacation windows and forwarding/filter ordering assessment are not implemented yet"),
+        ("webmail-data", "RoundCube preservation and SOGo import assessment are not implemented yet"),
+        ("global-settings", "Shared server settings and source sender restriction assessment are not implemented yet"),
+        ("storage-transfer", "Mail volume mounts, ownership, capacity and transfer capability checks are not implemented yet"),
+        ("cutover-resume", "Isolation, migration journals, DNS handoff and delivery verification are not implemented yet"),
+    ))
+    return {"checks": checks, "admins": admins, "recovery": recovery, "forwardings": forwardings, "senderPermissions": permissions}

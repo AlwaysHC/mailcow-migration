@@ -1,0 +1,151 @@
+# Feature roadmap
+
+The first release covers domain-by-domain mail migration from PostfixAdmin or Plesk to an existing Mailcow installation.
+Checked items are implemented. Unchecked items are planned work, not currently available migration capabilities.
+The current pre-alpha supports configuration, source inspection, private exports and read-only account planning.
+
+**Preserve** means retain source data and supported behavior within the compatibility matrix.
+**Configure** means expose a mapping, policy or operational choice for explicit review.
+**Block** means report the affected data and stop the relevant migration before writes until a supported mapping exists.
+Blocked data must not be silently omitted. Applicable blockers must be gathered before source isolation or target mutations.
+
+## Configuration generation
+
+Configuration generation is available in the current development version.
+
+- [x] Provide an interactive `mailcow-migrate configure --config FILE` command that generates versioned JSON using
+  the existing source/target connection fields, relevant paths, and migration options. Display defaults for review.
+- [x] Let the user select PostfixAdmin, Plesk, or both. Prompt only for selected sources and omit unselected sections.
+  Require at least one source and construct connections only for configured sources.
+- [x] Ask for and validate default quarantine notification frequency/category, initially weekly/Junk folder.
+  Provide a shared resolver that preserves normalized source values and falls back per missing/null field to the configuration.
+- [x] Validate required values before saving. Write the file atomically with owner-only permissions;
+  do not silently overwrite an existing configuration. Store credential-file references rather than secrets in the JSON.
+- [ ] Make all migration processes load the selected file through one shared loader. Missing or invalid configuration
+  must produce an actionable error directing the operator to `configure`; do not silently substitute embedded connections.
+  The shared loader and local `check-config` command exist; migration workflows still need to be connected.
+- [ ] Preserve existing domain-specific settings, policy decisions, and resume identity checks when resolving the configuration.
+  Configuration supplies inputs; journals retain operation state. Editing the file must not silently retarget an unfinished batch.
+- [x] Keep configuration generation limited to local configuration output. Server preparation, source isolation,
+  account changes, and mail transfer remain separate operations using the saved configuration.
+
+## Inspection and planning
+
+- [x] Provide `inspect DOMAIN --config FILE [--output FILE]` for read-only configured-source inventories, Maildir checks,
+  authoritative DNS agreement, current-source matching, and private inspection reports. No target or mail-service changes.
+- [x] Provide `export DOMAIN --config FILE` for private domain account/configuration snapshots from
+  the currently matching source. Preserve PostfixAdmin SQL/configuration/Sieve evidence and Plesk snapshots/blockers;
+  record source identity, file hashes and completion, recheck inventory, and retain interrupted exports under the shared lock.
+  Derive the export directory from the workspace, domain and generated export ID, retaining earlier exports without manual paths.
+- [x] Provide `plan DOMAIN --config FILE --export DIR --out NEW_DIR` using completed, verified Python exports.
+  Preserve source account/alias/password mapping, source blockers, configured quarantine defaults, measured quotas,
+  account policy decisions, initial target readiness/conflicts and empty-domain reuse checks. Save a private review and provenance.
+  Full migration assessment remains pending and is explicitly distinguished from successful account planning.
+- [ ] Extend inspection into migration source selection with saved connection settings, cutover-resume detection and
+  cross-source operation-journal checks. Current-source inspection is not a resume or readiness check.
+- [ ] **Preserve:** Provide guided server preparation, domain migration, source prerequisite checks and SOGo capability checks.
+  Add account provisioning, mail transfer, Sieve/SOGo settings, full assessment, administrator and sender-permission import,
+  verification, activation and quota recalculation.
+- [ ] **Preserve:** Export source account/configuration inventories and record source identity without changing mail service.
+  Inspect both schema and effective configuration; keep exports private.
+  Domain source exports are implemented; shared-server export, full schema/configuration assessment and webmail export remain pending.
+- [ ] **Preserve:** Select PostfixAdmin or Plesk using the existing live configuration, Maildir, and DNS evidence.
+  Inspect only configured sources. Preserve saved connection settings, cutover-resume detection, and ambiguity checks.
+  The inventory and current DNS checks are implemented by `inspect`; journal-aware selection remains pending.
+- [x] **Preserve:** Plan a primary domain with its mail aliases, including domains containing aliases but no mailboxes.
+  Reject ambiguous ownership, chained/overlapping domain mappings, and incompatible mailbox paths.
+- [x] **Configure:** Measure stored mail and calculate mailbox/domain capacity with explicit quota headroom and minimums.
+  Preserve readable message-size evidence; unknown compression without usable metadata blocks accurate sizing.
+- [ ] **Preserve:** Produce a reviewable plan and assessment showing proposed changes, conflicts, unsupported data,
+  source/target identity, and operator decisions. Preview must not modify either mail service.
+  Account planning is implemented; native webmail, global-settings, storage/transfer and cutover/resume assessment remain pending.
+
+## Accounts and messages
+
+- [x] Apply the configured quarantine defaults through the shared resolver in both source planners when source values are unavailable.
+  The initial defaults are weekly notifications and the Junk-folder category.
+- [ ] **Preserve:** Stage domains, mailboxes, active/inactive states, display names, aliases, alias domains, and supported catch-alls.
+  Unknown-recipient behavior and forwarding-only accounts must have explicit target equivalents.
+- [ ] **Preserve:** Transfer accepted mailbox password hashes without requiring user resets. The PostfixAdmin baseline accepts
+  MD5-CRYPT only. Plesk accepts MD5-CRYPT, SHA256-CRYPT, SHA512-CRYPT, and BLF-CRYPT; available plaintext is converted to SSHA256.
+  Verify target scheme support and block malformed, truncated, or unmapped credentials.
+- [ ] **Configure:** Preserve mailbox forwarding destinations and keep-copy behavior. Account for personal-filter ordering;
+  the current Plesk path blocks forwarding combined with personal Sieve until an ordering adapter exists.
+- [ ] **Preserve:** Copy Maildir messages and supported metadata with append-only rsync, preserving existing target files.
+  Conflicting content, unsafe links, source changes, and unaccounted writers must stop copying or activation.
+  Include final verification and target quota recalculation.
+- [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
+  Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
+- [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
+  Review global administrators separately; Plesk panel users are outside this mail-domain migration.
+- [ ] **Configure:** Preserve supported send-as grants and BCC rules without widening existing target permissions or scope.
+
+## Filters and webmail
+
+- [ ] **Preserve:** Inventory and copy supported personal/default Sieve, compile it on the target, and preserve activation state.
+  Default-filter selection and replacing existing target scripts require explicit decisions and backups.
+- [ ] **Preserve:** Convert the supported PostfixAdmin Sieve subset into editable SOGo filters.
+  The Plesk baseline copies/compiles personal Sieve; it does not promise conversion of those scripts into editable preferences.
+- [ ] **Configure:** Convert PostfixAdmin vacations and forwarding into supported SOGo/Sieve settings, preserving enabled state,
+  date windows, interval semantics, and local-copy/filter ordering. Timezone and zero-interval policies must be explicit.
+  Prior autoresponder reply history is not transferred.
+- [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
+  for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
+- [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
+  Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
+- [ ] **Preserve:** Identify and revoke source RoundCube sessions for the batch after source isolation.
+  Support separately journaled target isolation for missing webmail imports on an already activated batch.
+
+## Server preparation and handoff
+
+- [ ] **Configure:** Review shared PostfixAdmin server settings before per-domain changes: supported transport routes,
+  outgoing relay credentials, sender restrictions, individual-IP whitelist adaptations, and server administrators.
+  Preserve explicit exclusions and explain semantic differences. Plesk mail-domain support does not imply importing all panel policy.
+- [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
+  and revoke webmail access while leaving unrelated domains operational.
+- [ ] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.
+  Do not silently stop an unrelated or shared job whose ownership is unknown.
+- [ ] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
+  and require operator delivery/client checks including received-message authentication results.
+- [ ] **Configure:** Offer confirmed certificate setup, DKIM generation, relay assignment, and per-domain source forwarding.
+  DNS edits remain operator-managed. Preserve recipient validation, alias domains, and catch-all policy in forwarding.
+- [ ] **Preserve:** Mark a batch complete only after required imports, activation, verification, and delivery confirmation succeed.
+
+## Recovery and configuration
+
+- [ ] **Preserve:** Use a shared lock, private exports/backups, versioned journals, atomic state writes, and drift detection.
+  Record mutation intent before execution and reconcile uncertain results before retrying.
+- [ ] **Preserve:** Resume without duplicate accounts, replacing mail, or overwriting later user edits.
+  Retain recovery evidence after interruptions and failures.
+- [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
+  Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
+- [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.
+  Further generalization beyond the configuration wizard and independent source selection is future work.
+- [ ] **Preserve:** Detect unfinished batches and coordinate locking across preparation and migration operations.
+  Validate saved settings, state versions and fingerprints before resuming.
+  Any necessary format conversion must preserve operation ownership and recovery evidence before resuming mutations.
+- [ ] **Preserve:** Keep terminal prompts/progress useful, errors visible, and logs free of passwords, API keys, and message content.
+  Package every required runtime resource inside this project.
+
+## Explicit blockers and exclusions
+
+| Classification | Data or configuration | Initial handling |
+| --- | --- | --- |
+| Block | Plesk autoresponders and Mailman lists | Inventory and require a separate supported migration. |
+| Block | Fetchmail jobs, including disabled jobs | Require an equivalent target mapping; do not substitute IMAP sync silently. |
+| Block | Inactive/additional Sieve, external includes, or unsupported syntax where conversion is required | Retain inventory and require mapping. |
+| Block | Unknown password schemes, phone recovery, unmapped expiry | Report affected accounts before staging. |
+| Block | Unknown RoundCube tables/plugin data, external address books, unsupported sessions | Require an exporter/storage adapter. |
+| Block | Custom routing, filters, canonical rewriting, or ambiguous queue history | Require a reviewed adapter for that source. |
+| Block | Backup-MX domains or unsupported alias/recipient policies | Require an explicit delivery mapping. |
+| Block | Source/target drift, uncertain mutations, or conflicting existing target data | Reconcile evidence before continuing. |
+| Exclude | Websites, Plesk panel accounts, Horde and other webmail providers | Outside the initial source adapters. |
+| Exclude | Calendars/tasks from external systems and complete spam/antivirus policy replication | Separate migration scope. |
+| Exclude | Automatic DNS edits, multi-domain parallel execution, and general post-cutover rollback | Operator workflow or later scope. |
+
+Configuration differences must be assessed per adapter. For example, the existing Plesk handoff preserves a supported
+recipient-canonical map chain, whereas unsupported canonical rewriting remains a blocker elsewhere.
+Declared exclusions must appear in the assessment whenever relevant data is discovered.
+
+New exporters, additional supported formats/releases, and configuration generalization beyond the required generation
+and source-selection steps are deferred. Unsupported data remains blocked until a reviewed mapping is implemented.

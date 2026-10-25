@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61,<75.4; python_version < '3.9'", "setuptools>=61; python_version >= '3.9'"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mailcow-migration"
+dynamic = ["version"]
+description = "Domain migration from PostfixAdmin and Plesk to Mailcow"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+]
+
+[project.scripts]
+mailcow-migrate = "mailcow_migration.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "mailcow_migration.__version__"}
+
+[tool.setuptools.package-data]
+"mailcow_migration.resources" = ["*.json", "*.sh", "*.php", "*.py", "*.awk"]

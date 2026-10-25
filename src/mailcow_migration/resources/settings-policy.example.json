@@ -1,0 +1,10 @@
+{
+  "adminNames": {},
+  "allDomainAdmins": "review",
+  "mergeAdmins": [],
+  "vacationZeroIntervalDays": null,
+  "vacationDatesAreUtc": false,
+  "vacationTimeZone": "Europe/Rome",
+  "sourcePasswordExpiration": "disabled",
+  "senderPermissions": {}
+}
