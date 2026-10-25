@@ -16,12 +16,17 @@ MySQL client or Plesk Python/CLI database access. It checks source inventories a
 full prerequisite assessment and migration-resume checks remain planned work.
 `plan` provides initial target prerequisites and domain/mailbox/alias/BCC conflict checks; this does not establish
 storage/transfer readiness, full migration compatibility or journal-aware resume. It uses completed exports, parses source
-account data and calculates quotas from mailbox measurements. It does not resume existing migration journals.
+account data and calculates quotas from mailbox measurements. It also assesses source Sieve, vacation and forwarding mappings.
+It does not resume existing migration journals or establish target webmail readiness.
 The `export` command additionally uses local `scp -O` for PostfixAdmin and the existing source Bash/MySQL dump/configuration
 utilities; Plesk export uses its root-only Python/CLI snapshot reader. Only the matching source is exported. Export success
 does not qualify account mappings or product versions, and migration-resume support is still pending.
 Default planning also requires the source sizing helper's Bash/find/mktemp/od/gzip/wc/rm/awk commands, and checks current source
 inventory before and after sizing. Its PostfixAdmin `--quota-mib` override skips source measurement; the live target is still checked.
+PostfixAdmin vacation assessment uses the host's IANA timezone data, normally under `/usr/share/zoneinfo` (`TZDIR` may select
+the system data directory). The bundled Python helper resolves date parts in a separate process, retaining Python 3.8 support
+without changing the CLI process timezone or adding a runtime package. Unknown zones and missing timezone data stop planning.
+Plesk Sieve is prepared for copying; its scripts are not restricted to the subset accepted by the editable SOGo filter mapper.
 
 ## Initial compatibility matrix
 

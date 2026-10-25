@@ -6,8 +6,9 @@ from typing import Any, Mapping
 from .mailcow import MailcowTarget
 from ..core.errors import MigrationError
 from ..core.storage import read_text
+from ..plans.assessment import check
 from ..plans.domain import active, address_domain
-from ..plans.policy import administrator_name, check
+from ..plans.policy import administrator_name
 
 DOMAIN_FIELDS = {"aliases": "max_num_aliases_for_domain", "mailboxes": "max_num_mboxes_for_domain",
                  "defquota": "def_quota_for_mbox", "maxquota": "max_quota_for_mbox", "quota": "max_quota_for_domain"}

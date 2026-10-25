@@ -3,11 +3,14 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from .domain import active, address, destinations
+from .assessment import check
+from .domain import active, address
 from .evidence import ExportEvidence
+from .forwarding import mailbox_delivery
+from .sieve_evidence import load_sieve_evidence
+from .webmail import webmail_assessment
 from ..core.errors import ConfigurationError, MigrationError
-from ..core.storage import read_json, read_text
-from ..sources import SourceKind
+from ..core.storage import read_json
 
 
 def load_policy(file: Optional[str]) -> Mapping[str, Any]:
@@ -32,7 +35,7 @@ def load_policy(file: Optional[str]) -> Mapping[str, Any]:
         raise ConfigurationError("vacationZeroIntervalDays must be null or a reviewed integer from 1 to 30")
     zone = policy.get("vacationTimeZone", "Europe/Rome")
     if not isinstance(zone, str) or not zone:
-        raise ConfigurationError("vacationTimeZone must be a nonempty timezone name; native vacation assessment validates its mapping")
+        raise ConfigurationError("vacationTimeZone must be a nonempty IANA timezone name")
     if "mailcowIp" in policy:
         try:
             if not isinstance(policy["mailcowIp"], str):
@@ -53,31 +56,21 @@ def administrator_name(username: str, policy: Mapping[str, Any]) -> str:
     return username.replace("@", ".").lower() if re.fullmatch(r"[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+", username) else username
 
 
-def check(identifier: str, status: str, detail: str) -> Mapping[str, str]:
-    return {"id": identifier, "status": status, "detail": detail}
-
-
 def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mapping[str, Any]) -> Mapping[str, Any]:
     checks, admins, recovery, forwardings = [], [], [], []
     source = plan["source"]
+    scripts = load_sieve_evidence(plan, evidence)
     for row in plan["aliases"]:
         if not row["mailbox"]:
             continue
         mailbox = next((item for item in plan["mailboxes"] if item["username"] == row["address"]), None)
-        targets = list(dict.fromkeys(destinations(row["payload"].get("goto", ""))))
-        keep_local = not row["payload"].get("goto_null") and row["address"] in targets
-        if mailbox is None or not keep_local or row["active"] != mailbox["active"]:
+        delivery = mailbox_delivery(row)
+        if mailbox is None or not delivery["keepLocal"] or row["active"] != mailbox["active"]:
             checks.append(check("mailbox-forwarding:" + row["address"], "blocked",
                                 "Automatic mailbox forwarding requires a local copy and matching mailbox/alias activity; source rule retained."))
-        else:
-            forwarded = [target for target in targets if target != row["address"]]
-            if forwarded:
-                forwardings.append({"username": row["address"], "destinations": forwarded, "active": row["active"], "keepLocal": True})
-    if evidence.source.connection.kind is SourceKind.PLESK:
-        snapshot = read_json(evidence.data / "source.json", private=True)
-        forwardings.extend({"username": row["username"], "destinations": [item.lower() for item in row["destinations"]],
-                            "active": 1, "keepLocal": row["delivery"], "method": "personal-sieve"}
-                           for row in snapshot["accounts"] if row["mailbox"] and row["forwarding"])
+        elif delivery["destinations"]:
+            forwardings.append({"username": row["address"], "active": row["active"], **delivery})
+    forwardings.extend(scripts.forwardings)
     for row in source["admins"]:
         if active(row.get("superadmin")):
             continue
@@ -124,10 +117,6 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
                         "Source password expiration is disabled under the existing policy" if expiration == "disabled" else
                         "Mailcow has no native dated/recurring password expiration; force_pw_update is not equivalent" if expiration == "enabled" else
                         "Confirm whether the source actually enforces password expiration; database dates do not establish this"))
-    if evidence.source.connection.kind is SourceKind.POSTFIXADMIN:
-        inactive = read_text(evidence.data / "config" / "inactive-sieve.files", private=True).split("\0")
-        checks.extend(check("inactive-sieve", "blocked", "Inactive Sieve script has no editable SOGo mapping: " + file)
-                      for file in inactive if file)
     users = {row["username"] for row in plan["mailboxes"]}
     addresses = users | {row["address"] for row in plan["aliases"] if not row["address"].startswith("@")}
     permissions = []
@@ -135,11 +124,13 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
         if username not in users or any(sender not in addresses for sender in senders):
             raise MigrationError("Sender permissions must name real batch users and explicit batch mailbox/alias addresses; no wildcards")
         permissions.append({"username": username, "senders": sorted(set(senders))})
+    webmail = webmail_assessment(plan, scripts, policy, evidence.source.connection.kind, forwardings)
+    checks.extend(webmail["checks"])
     checks.extend(check(identifier, "pending", detail) for identifier, detail in (
-        ("native-webmail-settings", "Sieve conversion, vacation windows and forwarding/filter ordering assessment are not implemented yet"),
         ("webmail-data", "RoundCube preservation and SOGo import assessment are not implemented yet"),
         ("global-settings", "Shared server settings and source sender restriction assessment are not implemented yet"),
         ("storage-transfer", "Mail volume mounts, ownership, capacity and transfer capability checks are not implemented yet"),
         ("cutover-resume", "Isolation, migration journals, DNS handoff and delivery verification are not implemented yet"),
     ))
-    return {"checks": checks, "admins": admins, "recovery": recovery, "forwardings": forwardings, "senderPermissions": permissions}
+    return {"checks": checks, "admins": admins, "recovery": recovery, "forwardings": forwardings,
+            "senderPermissions": permissions, "webmail": webmail}

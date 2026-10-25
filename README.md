@@ -11,7 +11,7 @@ Account creation, message transfer and cutover are not implemented yet. This dev
 | `check-config` | Local configuration validation. |
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
-| `plan` | Account mappings, quota calculations, policy decisions and initial target conflict checks. |
+| `plan` | Account and source webmail mappings, quota calculations, policy decisions and initial target conflict checks. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -160,14 +160,28 @@ sender permissions, and the source password-expiration decision. Recovery email/
 forwarding checks report unsupported mappings. Plesk forwarding retains its keep-copy choice for later personal Sieve import.
 No account, mail-service or policy changes are applied. Sizing uses a temporary source file listing that its helper removes.
 
-The new directory contains `plan.json`, `account-policy.json`, `policy.json`, `assessment.json`, `summary.txt`, `users.txt`,
+Source webmail assessment reads personal/default Sieve and maps the supported PostfixAdmin subset to editable SOGo filter
+definitions. Unsupported conditions/actions, string lists, folder hierarchies, modified UTF-7 folder names, external includes,
+and inactive scripts remain blockers. An empty personal script stays empty; only a missing personal script selects the default.
+Plesk personal Sieve is preserved for copying, with forwarding generated according to its keep-copy setting; it is not subjected
+to the PostfixAdmin editable-filter conversion. Plesk autoresponders and forwarding combined with personal Sieve remain blocked.
+
+PostfixAdmin vacations are assessed even when inactive or expired. UTC provenance, the approved 1–30 day reply interval,
+whole-day boundaries in `vacationTimeZone`, supported timestamp range and safe text representation must all be preserved.
+An interval of zero requires an explicit `vacationZeroIntervalDays` policy decision. Native SOGo preferences and inactive
+staging prefilters are proposed privately. Forwarding stays in a Mailcow prefilter when needed to let personal filters
+control the local copy; otherwise it maps to SOGo Forward settings. No source rule is rewritten or target setting applied.
+
+The new directory contains `plan.json`, `account-policy.json`, `webmail-plan.json`, `policy.json`, `assessment.json`, `summary.txt`, `users.txt`,
 `domains.json`, measurement diagnostics when present, and a completion manifest. Directories use mode 700 and files mode 600.
 The shared operation lock covers planning. Existing outputs are never overwritten; interrupted runs retain an incomplete manifest.
-Exit status 1 reports blockers or unresolved administrator decisions; 0 means account planning completed without those findings.
+Exit status 1 reports blockers or unresolved policy decisions; 0 means planning completed without those findings.
 
 **A completed plan is not migration approval.** `assessment.json` always records `migration_ready: false` in this version.
-Full native Sieve/vacation/SOGo/RoundCube assessment, shared-server and sender-restriction assessment, storage/transfer readiness,
-isolation, DNS handoff, delivery verification and journal-aware resume remain pending. These are explicitly reported as pending.
+`webmail-plan.json` records proposed source mappings and `target_verified: false`. Target Sieve compilation, SOGo capability
+and conflict checks, container timezone agreement and actual import verification remain pending. RoundCube data assessment,
+shared-server and sender-restriction assessment, storage/transfer readiness, isolation, DNS handoff, delivery verification
+and journal-aware resume also remain pending. These are explicitly reported as pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -179,6 +193,7 @@ their assessment. Planning does not resume an existing migration batch; retain i
 | `inspection`, `core.dns`, `sources.inventory` | Read-only source inventories, authoritative DNS agreement, and inspection reports. |
 | `exporting`, `sources.export` | Private source exports, inventory rechecks, completion manifests and file hashes. |
 | `planning`, `plans`, `sources.sql`, `sources.usage` | Account mapping, policy decisions, export validation and measured quotas. |
+| `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |
 | `core.commands`, `core.ssh` | Command execution, timeouts, private diagnostics, and SSH/SCP/rsync arguments. |
 | `core.storage`, `core.state` | Private JSON files, a shared operation lock, identity checks, and mutation journals. |

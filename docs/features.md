@@ -58,7 +58,7 @@ Configuration generation is available in the current development version.
   Preserve readable message-size evidence; unknown compression without usable metadata blocks accurate sizing.
 - [ ] **Preserve:** Produce a reviewable plan and assessment showing proposed changes, conflicts, unsupported data,
   source/target identity, and operator decisions. Preview must not modify either mail service.
-  Account planning is implemented; native webmail, global-settings, storage/transfer and cutover/resume assessment remain pending.
+  Account and source webmail planning are implemented; target webmail verification, global-settings, storage/transfer and cutover/resume remain pending.
 
 ## Accounts and messages
 
@@ -84,11 +84,15 @@ Configuration generation is available in the current development version.
 
 - [ ] **Preserve:** Inventory and copy supported personal/default Sieve, compile it on the target, and preserve activation state.
   Default-filter selection and replacing existing target scripts require explicit decisions and backups.
-- [ ] **Preserve:** Convert the supported PostfixAdmin Sieve subset into editable SOGo filters.
-  The Plesk baseline copies/compiles personal Sieve; it does not promise conversion of those scripts into editable preferences.
+- [x] **Preserve:** Convert the supported PostfixAdmin Sieve subset into planned editable SOGo filters.
+  Save personal/default scripts, converted rules, blockers, native preferences and staging prefilters in a private webmail plan.
+  Keep Plesk personal Sieve and forwarding scripts on their copy/compile path without imposing editable-filter conversion.
+- [ ] **Preserve:** Import and verify editable SOGo filters against target preferences and active scripts.
+  Target compilation, capability/conflict checks and readback remain required before applying the saved proposals.
 - [ ] **Configure:** Convert PostfixAdmin vacations and forwarding into supported SOGo/Sieve settings, preserving enabled state,
   date windows, interval semantics, and local-copy/filter ordering. Timezone and zero-interval policies must be explicit.
-  Prior autoresponder reply history is not transferred.
+  Source mapping and assessment are implemented, including whole-day timezone checks for inactive and expired records.
+  Target timezone agreement, import and verification remain pending. Prior autoresponder reply history is not transferred.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
 - [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
