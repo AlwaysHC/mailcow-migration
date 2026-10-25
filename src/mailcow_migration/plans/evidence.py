@@ -1,10 +1,10 @@
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Optional
 
 from ..configuration import Configuration, mail_root
 from ..core.errors import MigrationError
-from ..core.storage import local_path, read_json
+from ..core.storage import local_path, read_json, read_text
 from ..exporting import export_file_manifest
 from ..sources import SourceKind, configured_sources
 from ..sources.export import validate_plesk_snapshot, validate_postfixadmin_export
@@ -26,6 +26,16 @@ class ExportEvidence:
             raise MigrationError("Export manifest changed while planning")
         if export_file_manifest(self.data, secure=False) != self.manifest["files"]:
             raise MigrationError("Export files differ from their completion manifest; retain the export and investigate")
+
+
+def optional_export_text(evidence: ExportEvidence, *parts: str) -> Optional[str]:
+    file = local_path(evidence.data.joinpath(*parts))
+    if evidence.data not in file.parents:
+        raise MigrationError("Evidence must stay inside the source export")
+    try:
+        return read_text(file, private=True) if file.exists() else None
+    except UnicodeError as error:
+        raise MigrationError("Exported text must contain valid UTF-8; original files retained") from error
 
 
 def load_export(configuration: Configuration, domain: str, directory: Path) -> ExportEvidence:

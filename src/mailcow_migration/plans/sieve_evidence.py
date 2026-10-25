@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Tuple
 
-from .evidence import ExportEvidence
+from .evidence import ExportEvidence, optional_export_text
 from .forwarding import sieve_string
 from ..core.errors import MigrationError
-from ..core.storage import local_path, read_json, read_text
+from ..core.storage import read_json
 from ..sources import SourceKind
 
 
@@ -19,16 +19,6 @@ class SieveEvidence:
     def script(self, username: str) -> Optional[str]:
         personal = self.scripts.get(username)
         return self.default_sieve if personal is None else personal
-
-
-def optional_export_text(evidence: ExportEvidence, *parts: str) -> Optional[str]:
-    file = local_path(evidence.data.joinpath(*parts))
-    if evidence.data not in file.parents:
-        raise MigrationError("Sieve evidence must stay inside the source export")
-    try:
-        return read_text(file, private=True) if file.exists() else None
-    except UnicodeError as error:
-        raise MigrationError("Sieve export must contain valid UTF-8; original files retained") from error
 
 
 def load_sieve_evidence(plan: Mapping[str, Any], evidence: ExportEvidence) -> SieveEvidence:

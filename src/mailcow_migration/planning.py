@@ -89,6 +89,12 @@ def planning_summary(plan: Mapping[str, Any], assessment: Mapping[str, Any], acc
         *("SOGo " + name for name in row["preferences"]), *(["Mailcow forwarding prefilter"] if "prefilter" in row else []),
     ])) for row in webmail["nativeSettings"]["users"])
     lines.append("  {} inactive staging prefilters; detailed proposals in webmail-plan.json".format(len(webmail["prefilters"])))
+    shared = account_policy["sharedSettings"]
+    counts = shared["counts"]
+    lines.extend(("", "Shared server settings (no changes applied):",
+                  "  {} supported mappings; {} unsupported; {} blockers; {} informational".format(
+                      counts["automatic"], counts["unsupported"], counts["blocker"], counts["adapted"]),
+                  "  Source values, domain relationships and per-service sender findings: shared-settings-plan.json"))
     lines.extend(("", "Assessment:"))
     lines.extend("  [{}] {}: {}".format(row["status"], row["id"], row["detail"]) for row in assessment["checks"])
     lines.extend("  " + reason for reason in target["conflicts"]["reasons"])
@@ -149,11 +155,14 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
             encoded = json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
             assessment = {"version": 1, "kind": "account-planning-assessment", "checked_at": datetime.now(timezone.utc).isoformat(),
                           "plan_sha256": hashlib.sha256(encoded).hexdigest(), "migration_ready": False,
-                          "quotaMode": quota_mode, "checks": checks, "target": target, "webmail_plan": "webmail-plan.json"}
+                          "quotaMode": quota_mode, "checks": checks, "target": target,
+                          "webmail_plan": "webmail-plan.json", "shared_settings_plan": "shared-settings-plan.json"}
             write_private_json(destination / "plan.json", plan)
             write_private_json(destination / "policy.json", policy)
-            write_private_json(destination / "account-policy.json", {key: value for key, value in account_policy.items() if key != "webmail"})
-            write_private_json(destination / "webmail-plan.json", account_policy["webmail"])
+            reports = {"webmail": "webmail-plan.json", "sharedSettings": "shared-settings-plan.json"}
+            write_private_json(destination / "account-policy.json", {key: value for key, value in account_policy.items() if key not in reports})
+            for key, file in reports.items():
+                write_private_json(destination / file, account_policy[key])
             write_private_json(destination / "assessment.json", assessment)
             write_private_json(destination / "domains.json", plan["domains"])
             write_private_text(destination / "users.txt", "\n".join(row["username"] for row in plan["mailboxes"]) + "\n")

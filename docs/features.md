@@ -58,7 +58,8 @@ Configuration generation is available in the current development version.
   Preserve readable message-size evidence; unknown compression without usable metadata blocks accurate sizing.
 - [ ] **Preserve:** Produce a reviewable plan and assessment showing proposed changes, conflicts, unsupported data,
   source/target identity, and operator decisions. Preview must not modify either mail service.
-  Account and source webmail planning are implemented; target webmail verification, global-settings, storage/transfer and cutover/resume remain pending.
+  Account, source webmail, shared source settings and sender-policy assessments are implemented.
+  Target webmail verification, shared-setting application, storage/transfer and cutover/resume remain pending.
 
 ## Accounts and messages
 
@@ -102,9 +103,14 @@ Configuration generation is available in the current development version.
 
 ## Server preparation and handoff
 
+- [x] Assess shared PostfixAdmin settings and per-service sender restrictions from completed source exports without applying changes.
+  Classify complete map inventories, supported routes, relayhost, sender rejection, IP-whitelist adaptations and source blockers.
+  Preserve domain relationships and shared dependencies; save source values and per-service findings privately.
+  Plesk domain planning does not inherit the PostfixAdmin shared-setting import or fabricate missing sender evidence.
 - [ ] **Configure:** Review shared PostfixAdmin server settings before per-domain changes: supported transport routes,
   outgoing relay credentials, sender restrictions, individual-IP whitelist adaptations, and server administrators.
   Preserve explicit exclusions and explain semantic differences. Plesk mail-domain support does not imply importing all panel policy.
+  Source assessment is available; guided selections/exclusions, credentials, privilege decisions, application and target verification remain pending.
 - [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
   and revoke webmail access while leaving unrelated domains operational.
 - [ ] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.

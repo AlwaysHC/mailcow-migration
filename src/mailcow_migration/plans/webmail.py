@@ -1,5 +1,3 @@
-import hashlib
-import json
 import re
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
@@ -11,6 +9,7 @@ from .native_settings import mailbox_sieve, native_mailbox_settings, utc_date, v
 from .sieve import SieveMappingError
 from .sieve_evidence import SieveEvidence
 from ..core.errors import MigrationError
+from ..core.storage import json_fingerprint
 from ..core.timezones import timezone_parts
 from ..sources import SourceKind
 
@@ -24,8 +23,7 @@ def sieve_body(value: str) -> str:
 
 def vacation_prefilter(row: Mapping[str, Any], start: int, end: int, days: int) -> Mapping[str, Any]:
     values = {key: int(value) if isinstance(value, float) and value.is_integer() else value for key, value in row.items()}
-    encoded = json.dumps(values, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
-    handle = "migration-" + hashlib.sha256(encoded).hexdigest()[:24]
+    handle = "migration-" + json_fingerprint(values)[:24]
     script = "\n".join((
         'require ["vacation", "date", "relational"];',
         'if allof (currentdate :zone "+0000" :value "ge" "iso8601" {},'.format(sieve_string(utc_date(start))),

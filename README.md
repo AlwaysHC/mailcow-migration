@@ -11,7 +11,7 @@ Account creation, message transfer and cutover are not implemented yet. This dev
 | `check-config` | Local configuration validation. |
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
-| `plan` | Account and source webmail mappings, quota calculations, policy decisions and initial target conflict checks. |
+| `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -172,16 +172,35 @@ An interval of zero requires an explicit `vacationZeroIntervalDays` policy decis
 staging prefilters are proposed privately. Forwarding stays in a Mailcow prefilter when needed to let personal filters
 control the local copy; otherwise it maps to SOGo Forward settings. No source rule is rewritten or target setting applied.
 
-The new directory contains `plan.json`, `account-policy.json`, `webmail-plan.json`, `policy.json`, `assessment.json`, `summary.txt`, `users.txt`,
-`domains.json`, measurement diagnostics when present, and a completion manifest. Directories use mode 700 and files mode 600.
+Shared PostfixAdmin settings are assessed from the exported Postfix/Dovecot configuration and complete `transport`,
+`sender_access` and `rbl_override` maps. The report classifies supported mappings, informational settings, unsupported settings
+and blockers, including rules shared with other domains. Destination-specific routes and the default outgoing relay are
+separate proposals. Missing referenced maps, unsupported lookup chains, custom transport options, canonical rewriting and
+custom delivery filters retain their blocking behavior. Temporary migration hold overlays are normalized for classification;
+planning does not verify or change those holds.
+
+An individual-IP `OK` rule can be proposed as a Postscreen whitelist adaptation. This bypasses Postscreen checks for that IP;
+Rspamd filtering and SMTP relay/recipient restrictions remain in place. Exact sender rejection rules and supported SMTP routes
+have separate mappings. Unsupported policies and server administrator identities remain recorded for operator review.
+
+Sender-permission assessment inspects each SMTP service, configuration references, service overrides, restriction ordering,
+cleanup services and external filters. It distinguishes disabled authentication, discovered ownership rules, absent ownership
+checks and unresolved evidence. It never derives broad send-as grants from those findings; `senderPermissions` still requires
+explicit batch users and addresses. Plesk planning does not import PostfixAdmin shared settings or assume missing sender evidence.
+
+The new directory contains `plan.json`, `account-policy.json`, `webmail-plan.json`, `shared-settings-plan.json`, `policy.json`,
+`assessment.json`, `summary.txt`, `users.txt`, `domains.json`, measurement diagnostics when present, and a completion manifest.
+Directories use mode 700 and files mode 600. Full shared-setting values and per-service details stay in the private report.
+Its `automatic` classification means a supported mapping is known; no change has been selected, applied or verified.
 The shared operation lock covers planning. Existing outputs are never overwritten; interrupted runs retain an incomplete manifest.
 Exit status 1 reports blockers or unresolved policy decisions; 0 means planning completed without those findings.
 
 **A completed plan is not migration approval.** `assessment.json` always records `migration_ready: false` in this version.
 `webmail-plan.json` records proposed source mappings and `target_verified: false`. Target Sieve compilation, SOGo capability
-and conflict checks, container timezone agreement and actual import verification remain pending. RoundCube data assessment,
-shared-server and sender-restriction assessment, storage/transfer readiness, isolation, DNS handoff, delivery verification
-and journal-aware resume also remain pending. These are explicitly reported as pending.
+and conflict checks, container timezone agreement and actual import verification remain pending. The shared-settings report
+records `target_verified: false` and `selection_recorded: false`: selection/exclusion review, relay credentials, server administrator
+privileges, shared-setting application and target verification remain pending. RoundCube data assessment, storage/transfer readiness,
+isolation, DNS handoff, delivery verification and journal-aware resume also remain pending. These are explicitly reported as pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -194,6 +213,7 @@ their assessment. Planning does not resume an existing migration batch; retain i
 | `exporting`, `sources.export` | Private source exports, inventory rechecks, completion manifests and file hashes. |
 | `planning`, `plans`, `sources.sql`, `sources.usage` | Account mapping, policy decisions, export validation and measured quotas. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
+| `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |
 | `core.commands`, `core.ssh` | Command execution, timeouts, private diagnostics, and SSH/SCP/rsync arguments. |
 | `core.storage`, `core.state` | Private JSON files, a shared operation lock, identity checks, and mutation journals. |

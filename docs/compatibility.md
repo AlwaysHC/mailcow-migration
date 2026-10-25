@@ -17,7 +17,8 @@ full prerequisite assessment and migration-resume checks remain planned work.
 `plan` provides initial target prerequisites and domain/mailbox/alias/BCC conflict checks; this does not establish
 storage/transfer readiness, full migration compatibility or journal-aware resume. It uses completed exports, parses source
 account data and calculates quotas from mailbox measurements. It also assesses source Sieve, vacation and forwarding mappings.
-It does not resume existing migration journals or establish target webmail readiness.
+PostfixAdmin planning assesses shared routing/policy maps and per-service sender restrictions from the exported configuration.
+It does not resume existing migration journals, verify shared-setting application or establish target webmail readiness.
 The `export` command additionally uses local `scp -O` for PostfixAdmin and the existing source Bash/MySQL dump/configuration
 utilities; Plesk export uses its root-only Python/CLI snapshot reader. Only the matching source is exported. Export success
 does not qualify account mappings or product versions, and migration-resume support is still pending.

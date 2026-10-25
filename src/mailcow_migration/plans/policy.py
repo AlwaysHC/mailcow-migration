@@ -7,6 +7,7 @@ from .assessment import check
 from .domain import active, address
 from .evidence import ExportEvidence
 from .forwarding import mailbox_delivery
+from .global_settings import shared_settings_assessment
 from .sieve_evidence import load_sieve_evidence
 from .webmail import webmail_assessment
 from ..core.errors import ConfigurationError, MigrationError
@@ -126,11 +127,12 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
         permissions.append({"username": username, "senders": sorted(set(senders))})
     webmail = webmail_assessment(plan, scripts, policy, evidence.source.connection.kind, forwardings)
     checks.extend(webmail["checks"])
+    shared_settings = shared_settings_assessment(plan, evidence, policy)
+    checks.extend(shared_settings["checks"])
     checks.extend(check(identifier, "pending", detail) for identifier, detail in (
         ("webmail-data", "RoundCube preservation and SOGo import assessment are not implemented yet"),
-        ("global-settings", "Shared server settings and source sender restriction assessment are not implemented yet"),
         ("storage-transfer", "Mail volume mounts, ownership, capacity and transfer capability checks are not implemented yet"),
         ("cutover-resume", "Isolation, migration journals, DNS handoff and delivery verification are not implemented yet"),
     ))
     return {"checks": checks, "admins": admins, "recovery": recovery, "forwardings": forwardings,
-            "senderPermissions": permissions, "webmail": webmail}
+            "senderPermissions": permissions, "webmail": webmail, "sharedSettings": shared_settings}

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import stat
@@ -51,6 +52,11 @@ def invalid_constant(value: str) -> None:
 
 def decode_json(content: str) -> Any:
     return json.loads(content, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+
+
+def json_fingerprint(document: Any) -> str:
+    encoded = json.dumps(document, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def read_json(path: Path, *, private: bool = False) -> Any:
