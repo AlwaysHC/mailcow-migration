@@ -4,7 +4,7 @@ A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to
 
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
-RoundCube source snapshots, session previews and guarded session revocation are also available.
+RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
 Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -20,7 +20,7 @@ This snapshot has not been validated end to end.
 | `target-isolation` | Preview, pause and check Mailcow access, delivery and writers for a staged batch; retain guarded restoration state. |
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
-| `roundcube-sessions` | Save a private source snapshot and session preview; revoke/check batch sessions after source isolation. |
+| `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -224,7 +224,7 @@ records `target_verified: false` and `selection_recorded: false`: selection/excl
 privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-RoundCube data assessment, transfer execution, full source isolation, DNS handoff, delivery verification and full migration resume remain pending.
+RoundCube target assessment/import, transfer execution, full source isolation, DNS handoff and full migration resume remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -286,15 +286,43 @@ Preview leaves source data and sessions unchanged. It saves a consistent snapsho
 preferences and other persistent records, plus ignored-profile metadata and session counts. For duplicate profiles it selects
 the latest login, breaking ties by highest user ID; profiles without a batch mailbox are reported and left on the source.
 Stored files are counted and fingerprinted, not downloaded. Unknown tables, shared dictionary data, groups, saved responses,
-dictionaries, searches and stored files retain their preservation blockers. Contact/preference conversion and the complete
-SOGo assessment remain pending; a snapshot is not an import-ready plan.
+dictionaries, searches and stored files retain their preservation blockers. The same preview now builds SOGo proposals for
+supported contacts, collected recipients, identities, preferences and folder display state. Target checks/import remain pending.
+
+Each snapshot produces an immutable `proposal-HASH.json` and matching text review under the private `roundcube-sessions`
+directory. Stable contact/book identifiers preserve distinct source records; existing vCard UIDs are retained, while missing
+UIDs receive deterministic values. Duplicate UIDs, linked card assets, unsupported vCards and trusted-sender image permissions
+are blockers. Collected recipients retain their names, email addresses and raw timestamps as separate labelled contacts.
+
+Preference proposals preserve the supported locale/date/time, compose, threading, reading-delay, autosave and signature mappings.
+Automatic/missing timezone uses Europe/Rome, blank identity names use their email address, and a missing default identity selects
+the mailbox identity or creates one. Different sender addresses require verified send-as ownership; unsupported identity fields,
+external signature assets, conflicting signature formats and unknown preferences stop progress. Interface preferences deliberately
+left to SOGo's native behavior are listed with their original values retained in the source snapshot.
+
+When `collapsed_folders` is present, preview reads the source Dovecot namespace and folder tree, validates encoded folder names,
+and records the intended collapsed paths. Missing folders or unsupported hierarchy/layout block the proposal. Source folder trees
+are rechecked with the user-data snapshot before isolation continues. Final target expansion settings require copied mail and
+target-folder verification; the source proposal does not claim that work is complete.
+
+Read both proposal files before repeating preview with `--reviewed`. This records review only when the proposal exactly matches
+one already saved by a previous invocation. A new or changed proposal is saved for review, but cannot be approved in that same
+invocation; existing approvals do not carry across changed source data or folder trees. Source isolation requires the matching
+review record and no hard blockers. A successful preview alone is not migration approval.
+
+Only automatic read receipts (`mdn_default`), delivery notifications (`dsn_default`) and reply-folder placement
+(`reply_same_folder`) can be explicitly deferred. Their source values and proposed fallback behavior appear in the private review.
+If they are enabled, use `--reviewed --accept-deferrals` after inspecting that unchanged proposal. This preserves the values for
+later work; it does not import or silently discard them. Feature references in the proposal do not establish support in the
+installed target, and deferred preferences must be revisited through a verified mapping before any later application.
 
 Ask every migrating user to recover browser-only drafts in every browser/profile, save them in server Drafts, verify they
-reopen, and close the clients. Repeat preview with `--drafts-saved` to record that confirmation. The script cannot inspect
+reopen, and close the clients. Repeat preview with `--drafts-saved` to record that confirmation, alongside `--reviewed` after
+reviewing the unchanged proposal. The script cannot inspect
 browser local storage. Source login freeze and delivery pause require this confirmation and an unchanged source snapshot;
 keep user edits and account administration frozen afterward. Login release remains available when these preflights fail.
 
-The PostfixAdmin sequence is now RoundCube preview/draft confirmation, source login freeze, then source delivery pause.
+The PostfixAdmin sequence is RoundCube proposal review/deferral and draft confirmation, source login freeze, then source delivery pause.
 `source-delivery --action pause --apply` installs and verifies delivery holds before revoking RoundCube sessions. It includes
 all profiles belonging to batch mailboxes, including duplicate and alias-domain logins, while retaining unrelated sessions.
 The helper matches decoded ownership and deletes each session only if both its ID and stored serialized value still match;
@@ -306,13 +334,15 @@ revocation requires its pending source-isolation adapter. No operation changes c
 imports data into SOGo, copies mail or activates accounts.
 
 Private evidence lives under `roundcube-sessions` in the batch directory. Its journal records the source, target, plan,
-installation, baseline snapshot, draft confirmation and each attempt's before/removed/after counts. Snapshots are retained
+installation, baseline snapshot, proposal review/deferrals, draft confirmation and each attempt's before/removed/after counts. Snapshots are retained
 by fingerprint, including changed snapshots found during verification. An interrupted revocation may already have committed;
 resume against the same baseline after restoring the required isolation. Preview cannot replace an unfinished operation's
-baseline, and persistent-data drift requires reconciliation. Invalid exporter output is retained privately for diagnosis.
+baseline, and persistent-data drift requires reconciliation. Existing journals without proposals can add the new review metadata
+through preview while retaining their session receipts and unchanged baseline. Invalid exporter output is retained privately for diagnosis.
 
 Session completion is distinct from webmail-import completion: this journal retains `import_complete: false` and
-`source_isolated: false`, and cannot satisfy Mailcow's webmail-import release guard. Full conversion/import, combined submission
+`source_isolated: false`, and cannot satisfy Mailcow's webmail-import release guard. Proposals retain `target_verified: false` and
+`import_complete: false`. Target configuration/conflict checks, actual SOGo import/readback, combined submission
 checks and migration readiness remain pending.
 
 ## PostfixAdmin source logins
@@ -452,6 +482,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
+| `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
 | `targets.readiness` | Read-only target prerequisite checks, account conflicts and empty-domain reuse assessment. |

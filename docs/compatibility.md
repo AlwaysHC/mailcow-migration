@@ -8,7 +8,7 @@ It is not an end-to-end certification of the listed product versions.
 
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available separately.
-RoundCube snapshots/session previews support either source; session revocation currently requires the PostfixAdmin isolation path.
+RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
 Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -83,7 +83,7 @@ query and account layout. Supporting additional layouts is future work.
 The source needs PHP CLI with `JSON_THROW_ON_ERROR`, `cp --preserve=all`, `doveconf` and `doveadm`,
 plus permission to reload Dovecot and edit its SQL configuration. That configuration must be a regular single-link file
 without symlinks. Full backups and database credentials remain on the source; only the query and verification hashes return.
-Before freeze, source routing and the saved RoundCube snapshot/session preview must verify, with browser drafts confirmed saved.
+Before freeze, source routing and the saved RoundCube snapshot/proposal must verify, with review, required deferrals and browser drafts confirmed.
 Login release remains available when those checks fail.
 `source-delivery` requires one primary domain, a safe `/root/mailcow-in-progress` directory from source preparation,
 Postfix retry/error transport, hash/regexp maps, `postconf`, `postmap`, `postfix`, `postqueue` and `postcat`, and readable cron/`/proc` data.
@@ -108,7 +108,13 @@ no SSH input after transfer. Configuration `exit`/`die`, malformed JSON and inco
 The selected installation and snapshot are pinned to the batch, and SQL credentials remain in the source configuration.
 Session deletion uses stored user ownership plus an ID/value comparison; unexpected ownership or concurrent changes stop it.
 Unknown tables, shared dictionaries and selected-profile groups, responses, dictionaries, searches and files block source
-isolation until their preservation is supported. Snapshot/session completion does not establish SOGo conversion or import.
+isolation until their preservation is supported. Supported contacts, identities and preferences are mapped into private proposals;
+target configuration, conflict checks and import remain pending. Named timezones use the host IANA timezone data through the
+existing isolated Python helper; validation does not change the CLI process timezone.
+Collapsed-folder mapping requires Dovecot's JSON mailbox list in modified UTF-7, an empty personal namespace prefix and a
+verified `.` or `/` separator. Its default is derived from the supported Dovecot 2.x storage layout when not explicitly configured.
+Unknown or missing folder evidence blocks the source proposal; target folder verification must happen after message copying.
+Review and explicit receipt/reply-folder deferrals are bound to the unchanged proposal fingerprint, not to upstream feature status.
 The recognized plugin set is `archive`, `zipdownload`, `managesieve`, `emoticons`, `password`, and `markasjunk`;
 recognition does not imply that every plugin state can be converted. Unknown data, pending mandatory password changes,
 per-host configuration, or external address books require explicit handling before migration.

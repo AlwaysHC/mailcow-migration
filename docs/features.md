@@ -106,7 +106,11 @@ Configuration generation is available in the current development version.
   Target timezone agreement, import and verification remain pending. Prior autoresponder reply history is not transferred.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
-  Source snapshots, selected/ignored-profile inventories and file fingerprints are available; full conversion/import remains pending.
+  Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available; target import remains pending.
+- [x] Map supported RoundCube vCards, collected recipients, identities, preferences and source folder display state into reviewable private proposals.
+  Preserve stable record IDs, existing UIDs, defaults, unsupported-data blockers and source snapshot/folder drift checks.
+  Record review of an unchanged proposal and explicit deferral of supported receipt/reply-folder preferences before source isolation.
+  Keep target capability/conflict checks and actual import/readback separate and pending.
 - [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
   Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
 - [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.

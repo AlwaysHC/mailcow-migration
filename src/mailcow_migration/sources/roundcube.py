@@ -3,26 +3,20 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from uuid import uuid4
 
 from .php import source_php_file
 from ..configuration import Configuration, MailcowConfiguration, absolute_path
 from ..core.errors import MigrationError
+from ..core.folders import folder_inventory
 from ..core.state import require_identity
-from ..core.storage import json_fingerprint, local_path, read_json, write_private_json
+from ..core.storage import json_fingerprint, local_path, read_json, read_text, write_private_json, write_private_text
+from ..plans.roundcube import roundcube_plan, roundcube_summary
 from ..plans.saved import SavedPlan
 
 
 def session_directory(batch: SavedPlan) -> Path:
     return local_path(batch.directory / "roundcube-sessions")
-
-
-def snapshot_blockers(snapshot: Mapping[str, Any]) -> list:
-    return [
-        *("Database table {} has unknown user-data ownership/conversion".format(table) for table in snapshot["unknownTables"]),
-        *(["Shared dictionary records have no implemented SOGo conversion"] if snapshot["sharedDictionary"] else []),
-        *("{}: {} {} records have no implemented SOGo conversion".format(user["login"], len(user[key]), key)
-          for user in snapshot["users"] for key in ("groups", "responses", "dictionary", "searches", "files") if user[key]),
-    ]
 
 
 def roundcube_sessions(batch: SavedPlan, configuration: Configuration, directory: Optional[str] = None) -> "RoundcubeSessions":
@@ -98,6 +92,12 @@ class RoundcubeSessions:
         if record["complete"] and (record["stage"] != "complete" or not record["drafts_saved"]
                                    or not record["attempts"] or not record["attempts"][-1]["complete"]):
             raise MigrationError("RoundCube session completion differs from its operation receipts")
+        if "proposal_sha256" in record:
+            proposal = record["proposal_sha256"]
+            if (not isinstance(proposal, str) or not re.fullmatch(r"[a-f0-9]{64}", proposal)
+                    or record.get("proposal") != "proposal-" + proposal + ".json"
+                    or type(record.get("reviewed")) is not bool or type(record.get("deferrals_accepted")) is not bool):
+                raise MigrationError("Invalid saved SOGo proposal review; retain the session journal")
         return record
 
     def request(self, action: str) -> Mapping[str, Any]:
@@ -139,29 +139,57 @@ class RoundcubeSessions:
                for user in snapshot["ignoredUsers"]):
             raise MigrationError("Invalid ignored RoundCube profile inventory")
 
-    def save_snapshot(self, snapshot: Mapping[str, Any]) -> str:
-        fingerprint = json_fingerprint(snapshot, canonical=True)
-        file = local_path(session_directory(self.batch) / ("inventory-" + fingerprint + ".json"))
+    def save_document(self, document: Mapping[str, Any], prefix: str) -> str:
+        fingerprint = json_fingerprint(document, canonical=True)
+        file = local_path(session_directory(self.batch) / (prefix + "-" + fingerprint + ".json"))
         if file.exists():
-            if read_json(file, private=True) != snapshot:
-                raise MigrationError("Saved RoundCube snapshot differs from its content fingerprint; retain the evidence")
+            if read_json(file, private=True) != document:
+                raise MigrationError("Saved RoundCube evidence differs from its content fingerprint; retain the files")
         else:
-            write_private_json(file, snapshot)
+            write_private_json(file, document)
         return fingerprint
 
-    def preview(self, *, drafts_saved: bool = False) -> Mapping[str, Any]:
+    def save_snapshot(self, snapshot: Mapping[str, Any]) -> str:
+        return self.save_document(snapshot, "inventory")
+
+    def inspect_folders(self, username: str) -> Mapping[str, Any]:
+        return folder_inventory(lambda arguments: self.batch.source.ssh.run(
+            arguments, diagnostic_file=session_directory(self.batch) / ("folder-inspection-" + uuid4().hex + ".txt"),
+        ).stdout, username)
+
+    def save_proposal(self, snapshot: Mapping[str, Any]) -> Mapping[str, Any]:
+        proposal = roundcube_plan(snapshot, self.batch.source.ssh.host, self.batch.plan, self.batch.fingerprint, self.inspect_folders)
+        fingerprint = self.save_document(proposal, "proposal")
+        summary = roundcube_summary(proposal)
+        file = local_path(session_directory(self.batch) / ("proposal-" + fingerprint + ".txt"))
+        if file.exists():
+            if read_text(file, private=True) != summary:
+                raise MigrationError("Saved SOGo review summary changed; retain it and review the matching JSON proposal")
+        else:
+            write_private_text(file, summary)
+        return proposal
+
+    def preview(self, *, drafts_saved: bool = False, reviewed: bool = False, accept_deferrals: bool = False) -> Mapping[str, Any]:
         previous = self.record()
         snapshot = self.request("snapshot")
         fingerprint = self.save_snapshot(snapshot)
+        proposal = self.save_proposal(snapshot)
+        proposal_hash = json_fingerprint(proposal, canonical=True)
         sessions = self.request("inspect-sessions")
-        if previous and not previous["complete"] and previous["stage"] != "preview":
+        same = previous is not None and previous["source_sha256"] == fingerprint
+        same_proposal = bool(same and previous.get("proposal_sha256") == proposal_hash)
+        pending = previous is not None and not previous["complete"] and previous["stage"] != "preview"
+        if pending and (not same or "proposal_sha256" in previous and not same_proposal):
             raise MigrationError("A RoundCube session operation is unfinished. Its baseline was retained; "
                                  "resume revocation or reconcile the saved snapshots before replacing that baseline")
-        same = previous is not None and previous["source_sha256"] == fingerprint
         verified = bool(same and previous["complete"] and not any(sessions.values()))
+        review_matches = same_proposal and not proposal["blockers"]
         state = {**self.identity, "source_sha256": fingerprint, "snapshot": "inventory-" + fingerprint + ".json",
-                 "stage": "complete" if verified else "preview", "complete": verified, "preview_sessions": sessions,
-                 "blockers": snapshot_blockers(snapshot),
+                 "stage": previous["stage"] if pending else "complete" if verified else "preview", "complete": verified,
+                 "preview_sessions": sessions, "blockers": proposal["blockers"],
+                 "proposal": "proposal-" + proposal_hash + ".json", "proposal_sha256": proposal_hash,
+                 "reviewed": bool(review_matches and (reviewed or previous.get("reviewed"))),
+                 "deferrals_accepted": bool(review_matches and (accept_deferrals or previous.get("deferrals_accepted"))),
                  "drafts_saved": drafts_saved or bool(same and previous["drafts_saved"]),
                  "attempts": previous["attempts"] if previous else []}
         write_private_json(self.file, state, replace=True)
@@ -173,7 +201,36 @@ class RoundcubeSessions:
                 print("RoundCube profile {} ({}) has no batch mailbox; its persistent data remains on the source.".format(user["id"], user["login"]))
         if state["blockers"]:
             print("Resolve these preservation blockers before source isolation:\n" + "\n".join(state["blockers"]))
+        print("SOGo proposal: {}".format(session_directory(self.batch) / state["proposal"]))
+        print("Review summary: {}".format(session_directory(self.batch) / ("proposal-" + proposal_hash + ".txt")))
+        print("{} contacts and {} identities proposed across {} profiles.".format(
+            sum(len(user["records"]) for user in proposal["users"]), sum(user["identities"] for user in proposal["users"]), len(proposal["users"])))
+        if proposal["deferredPreferences"] and not state["deferrals_accepted"]:
+            print("{} preferences require explicit deferral approval; original values and proposed fallbacks are in the review.".format(
+                len(proposal["deferredPreferences"])))
+        if reviewed and not same_proposal:
+            raise MigrationError("A new SOGo proposal was saved. Review its JSON/text files before rerunning preview with --reviewed")
         return state
+
+    def proposal(self, record: Mapping[str, Any], *, require_review: bool = True) -> Mapping[str, Any]:
+        if "proposal_sha256" not in record:
+            raise MigrationError("Run RoundCube preview again to create and review its SOGo proposal; existing session receipts are retained")
+        proposal = read_json(session_directory(self.batch) / record["proposal"], private=True)
+        if (not isinstance(proposal, dict) or type(proposal.get("version")) is not int or proposal["version"] != 1
+                or proposal.get("kind") != "roundcube-sogo-proposal" or proposal.get("preservation_version") != 3
+                or proposal.get("source_sha256") != record["source_sha256"] or proposal.get("account_plan_sha256") != self.batch.fingerprint
+                or proposal.get("target_verified") is not False or proposal.get("import_complete") is not False
+                or not isinstance(proposal.get("users"), list) or not isinstance(proposal.get("blockers"), list)
+                or not isinstance(proposal.get("deferredPreferences"), list)
+                or json_fingerprint(proposal, canonical=True) != record["proposal_sha256"]):
+            raise MigrationError("Saved SOGo proposal changed or belongs to another snapshot/plan; retain the original evidence")
+        if proposal["blockers"]:
+            raise MigrationError("RoundCube preservation is blocked:\n" + "\n".join(proposal["blockers"]))
+        if require_review and not record["reviewed"]:
+            raise MigrationError("Review the saved SOGo proposal and rerun roundcube-sessions preview with --reviewed")
+        if require_review and proposal["deferredPreferences"] and not record["deferrals_accepted"]:
+            raise MigrationError("Review the preserved preference values/fallbacks and explicitly accept their deferral with --accept-deferrals")
+        return proposal
 
     def approved_record(self) -> Mapping[str, Any]:
         record = self.record()
@@ -183,9 +240,7 @@ class RoundcubeSessions:
         if not isinstance(snapshot, dict) or json_fingerprint(snapshot, canonical=True) != record["source_sha256"]:
             raise MigrationError("RoundCube preview snapshot changed; retain the journal and original evidence")
         self.validate_snapshot(snapshot)
-        blockers = snapshot_blockers(snapshot)
-        if blockers:
-            raise MigrationError("RoundCube preservation is blocked:\n" + "\n".join(blockers))
+        self.proposal(record)
         return record
 
     def check_source(self, record: Mapping[str, Any]) -> None:
@@ -194,6 +249,13 @@ class RoundcubeSessions:
         if fingerprint != record["source_sha256"]:
             raise MigrationError("RoundCube user data changed after preview; current and approved snapshots were retained. "
                                  "Freeze webmail edits and reconcile the snapshots before continuing")
+        for user in self.proposal(record, require_review=False)["users"]:
+            folders = user["folderState"]
+            if folders is not None:
+                current = self.inspect_folders(user["username"])
+                if current != folders["source"]:
+                    self.save_document({"username": user["username"], "source": current}, "folder-inventory")
+                    raise MigrationError(user["username"] + ": source folder tree changed after preview; retain the folder evidence and reconcile")
 
     def preflight(self, *, require_drafts: bool = True) -> Mapping[str, int]:
         record = self.approved_record()

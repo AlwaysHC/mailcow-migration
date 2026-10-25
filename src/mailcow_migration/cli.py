@@ -70,6 +70,8 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--directory", metavar="DIR", help="RoundCube installation on the source; pinned to this batch after preview")
             command.add_argument("--apply", action="store_true", help="Required for revoke; source login and delivery holds must verify")
             command.add_argument("--drafts-saved", action="store_true", help="Confirm all migrating users saved browser-only drafts on the server")
+            command.add_argument("--reviewed", action="store_true", help="Confirm review of the previously saved, unchanged SOGo proposal")
+            command.add_argument("--accept-deferrals", action="store_true", help="Explicitly defer the listed receipt/reply-folder preferences")
     return result
 
 
@@ -96,7 +98,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             return run_source_delivery(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
         elif options.command == "roundcube-sessions":
             return run_roundcube_sessions(load_configuration(options.config), options.plan, action=options.action, apply=options.apply,
-                                          directory=options.directory, drafts_saved=options.drafts_saved)
+                                          directory=options.directory, drafts_saved=options.drafts_saved,
+                                          reviewed=options.reviewed, accept_deferrals=options.accept_deferrals)
         else:
             load_configuration(options.config)
             print("Configuration is valid. Credential files and server connectivity have not been checked.")

@@ -16,12 +16,14 @@ from .sources.roundcube import roundcube_sessions
 
 def run_roundcube_sessions(
     configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False,
-    directory: Optional[str] = None, drafts_saved: bool = False,
+    directory: Optional[str] = None, drafts_saved: bool = False, reviewed: bool = False, accept_deferrals: bool = False,
 ) -> int:
     if sys.platform != "linux" or os.geteuid() != 0:
         raise ConfigurationError("Run RoundCube session operations on the Linux Mailcow host as root")
     if action not in ("preview", "revoke", "check") or apply != (action == "revoke") or action == "check" and drafts_saved:
         raise ConfigurationError("Use --apply only with revoke; preview/check leave source sessions unchanged")
+    if (reviewed or accept_deferrals) and action != "preview" or accept_deferrals and not reviewed:
+        raise ConfigurationError("Use --reviewed only with preview; --accept-deferrals also requires --reviewed")
     result = 0
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
@@ -29,9 +31,10 @@ def run_roundcube_sessions(
             require_before_activation(account_journal(batch, configuration).read())
         sessions = roundcube_sessions(batch, configuration, directory)
         if action == "preview":
-            record = sessions.preview(drafts_saved=drafts_saved)
+            record = sessions.preview(drafts_saved=drafts_saved, reviewed=reviewed, accept_deferrals=accept_deferrals)
             result = int(bool(record["blockers"]))
             print("Browser-only drafts saved on the server: {}.".format("confirmed" if record["drafts_saved"] else "not yet confirmed"))
+            print("SOGo proposal review: {}.".format("recorded" if record["reviewed"] else "required before source isolation"))
             print("Preview saved; source user data and sessions were not changed.")
         elif action == "check":
             sessions.check()
