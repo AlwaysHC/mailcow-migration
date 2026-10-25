@@ -7,6 +7,7 @@ from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
 from .plans.saved import load_saved_plan
+from .sogo_target import sogo_preparation
 from .sources.delivery import HOLD, SourceDelivery
 from .sources.logins import SourceLogins
 from .sources.roundcube import roundcube_sessions
@@ -50,6 +51,7 @@ def run_source_delivery(configuration: Configuration, file: Path, *, action: str
             else:
                 if batch.plan["mailboxes"]:
                     SourceLogins(batch).check()
+                sogo_preparation(configuration, batch).preflight()
                 delivery.pause(snapshot)
                 sessions.revoke()
                 print("Source delivery pause completed. Holds remain until the guarded handoff workflow is available and completed.")

@@ -7,6 +7,7 @@ from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
 from .plans.saved import load_saved_plan
+from .sogo_target import sogo_preparation
 from .sources.delivery import SourceDelivery
 from .sources.logins import SourceLogins, login_query
 from .sources.roundcube import roundcube_sessions
@@ -36,6 +37,7 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
                 print("Checking source delivery prerequisites before changing logins...")
                 SourceDelivery(batch, configuration.mailcow.api).inspect()
                 roundcube_sessions(batch, configuration).preflight()
+                sogo_preparation(configuration, batch).preflight()
             snapshot = logins.inspect()
             if action == "preview":
                 _, blocked = login_query(snapshot.query, logins.users, freeze=True)

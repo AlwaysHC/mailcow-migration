@@ -9,6 +9,7 @@ It is not an end-to-end certification of the listed product versions.
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available separately.
 RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
+SOGo configuration preparation and native user-data conflict inspection are available separately from import.
 Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -84,6 +85,7 @@ The source needs PHP CLI with `JSON_THROW_ON_ERROR`, `cp --preserve=all`, `dovec
 plus permission to reload Dovecot and edit its SQL configuration. That configuration must be a regular single-link file
 without symlinks. Full backups and database credentials remain on the source; only the query and verification hashes return.
 Before freeze, source routing and the saved RoundCube snapshot/proposal must verify, with review, required deferrals and browser drafts confirmed.
+Required SOGo target configuration must also pass live preflight; incomplete configuration/restart records block further isolation.
 Login release remains available when those checks fail.
 `source-delivery` requires one primary domain, a safe `/root/mailcow-in-progress` directory from source preparation,
 Postfix retry/error transport, hash/regexp maps, `postconf`, `postmap`, `postfix`, `postqueue` and `postcat`, and readable cron/`/proc` data.
@@ -123,6 +125,13 @@ per-host configuration, or external address books require explicit handling befo
 
 The target must provide an HTTPS Mailcow API, a usable API key with the required read/write access, local configuration
 and mail-volume access, and Docker Compose v2. Verify `MAILDIR_SUB=Maildir`, vmail ownership, and the actual Docker mounts.
+
+`sogo-target` requires the running `sogo-mailcow` container, its `sogo` user, `sogo-tool`, `plutil`, and a readable regular
+`data/conf/sogo/sogo.conf` without symlinked paths. Applying custom identity support also needs writable host configuration,
+permission to restart SOGo and `nc` in the container for its startup check. Native user inspection needs loaded SOGo user sources
+and working per-user backups; inactive staging alone does not prove those prerequisites. Property-list output uses the supported
+GNUstep representation, including Unicode escapes, and is parsed before applying a proposed configuration change.
+No preview or native inspection clears cached user lookups, refreshes sources, imports user data or grants address-book ownership.
 
 | Container | Capabilities needed by planned migration workflows |
 | --- | --- |

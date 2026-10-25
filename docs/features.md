@@ -113,6 +113,11 @@ Configuration generation is available in the current development version.
   Keep target capability/conflict checks and actual import/readback separate and pending.
 - [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
   Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
+  Target configuration preview/application for custom identity support is implemented, with explicit shared-restart scope,
+  private backups, pending-operation checks and effective-setting readback. Full native-filter target integration remains pending.
+- [x] Inspect existing SOGo preferences and destination address books through native backups without changing user data.
+  Preserve exact conflict/ownership checks and the first private backup; missing user sources and failed lookups block inspection.
+  Native inspection does not authorize writes, refresh sources, clear cached user records or mark import complete.
 - [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.
   Preserve exact session ownership/value checks, draft confirmation, zero-session readback and unchanged user-data snapshots.
   Retain separate receipts and evidence; Plesk preview is available, while its revocation adapter remains pending.

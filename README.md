@@ -5,6 +5,7 @@ A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
+SOGo target preparation can check/configure custom identity support and inspect existing user-data conflicts.
 Full source isolation, message transfer, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -21,6 +22,7 @@ This snapshot has not been validated end to end.
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
+| `sogo-target` | Preview/apply required identity configuration, check effective settings, and inspect native user-data conflicts. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -224,7 +226,7 @@ records `target_verified: false` and `selection_recorded: false`: selection/excl
 privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-RoundCube target assessment/import, transfer execution, full source isolation, DNS handoff and full migration resume remain pending.
+Full RoundCube target assessment/import, transfer execution, full source isolation, DNS handoff and full migration resume remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -322,7 +324,8 @@ reviewing the unchanged proposal. The script cannot inspect
 browser local storage. Source login freeze and delivery pause require this confirmation and an unchanged source snapshot;
 keep user edits and account administration frozen afterward. Login release remains available when these preflights fail.
 
-The PostfixAdmin sequence is RoundCube proposal review/deferral and draft confirmation, source login freeze, then source delivery pause.
+The PostfixAdmin sequence is RoundCube proposal review/deferral and draft confirmation, SOGo target preparation,
+source login freeze, then source delivery pause.
 `source-delivery --action pause --apply` installs and verifies delivery holds before revoking RoundCube sessions. It includes
 all profiles belonging to batch mailboxes, including duplicate and alias-domain logins, while retaining unrelated sessions.
 The helper matches decoded ownership and deletes each session only if both its ID and stored serialized value still match;
@@ -342,8 +345,47 @@ through preview while retaining their session receipts and unchanged baseline. I
 
 Session completion is distinct from webmail-import completion: this journal retains `import_complete: false` and
 `source_isolated: false`, and cannot satisfy Mailcow's webmail-import release guard. Proposals retain `target_verified: false` and
-`import_complete: false`. Target configuration/conflict checks, actual SOGo import/readback, combined submission
+`import_complete: false`. SOGo target preparation and native conflict inspection are separate operations; actual import/readback, combined submission
 checks and migration readiness remain pending.
+
+## SOGo target preparation
+
+Use the reviewed, unchanged RoundCube proposal to preview target requirements:
+
+```bash
+mailcow-migrate sogo-target --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+The default `preview` action checks `sogo-tool`, GNUstep property-list conversion and effective settings from
+`sogo-tool dump-defaults all`, including domain overrides. It saves a private assessment and any proposed configuration change.
+Missing SOGo user sources are reported separately: configuration readiness does not mean that inactive staged users are ready
+for native backups or import. An empty selected-profile inventory needs no SOGo changes.
+
+If custom identities are disabled, review the preview before running `--action configure --apply`. This sets
+`SOGoMailCustomFromEnabled = YES` in the persistent configuration and in affected existing overrides for this batch, preserving
+other parsed settings and unrelated domain overrides. **It changes the default for all SOGo users and restarts sogo-mailcow,
+briefly interrupting webmail/DAV for all domains.** Apply only when that interruption is acceptable. If the required setting is
+already enabled and no configuration operation is pending, the command does not write or restart anything.
+
+The saved preview must still match the proposal and live configuration. A private backup and pending operation record are
+written before atomic replacement, retaining the configuration file's owner and permissions. The command waits for SOGo's
+listener after restart and reads back the effective identity setting. A failure retains the pending record; rerun the same
+configure command to resume only when the live file matches its saved before/after values. External drift stops continuation.
+Backups, previews and diagnostics are private under `sogo-target` in the batch directory and can contain configuration secrets.
+
+`--action check` rechecks the required effective configuration. Source login freeze and source delivery pause also require these
+checks, and refuse an unfinished SOGo configuration/restart. Source login release remains available if target preparation fails.
+This configuration step does not import identities, preferences or contacts.
+
+`--action inspect-users` reads native SOGo backups as the `sogo` user once the domain's user sources are available. The first
+private backup for each user is retained. Failed native operations retain their private temporary directory inside the container
+for diagnosis. Existing preference differences are saved in private conflict reports; comparison normalizes only the supported
+boolean flags, preserving names, signatures, missing fields and identity/filter ordering.
+
+An existing destination address book without this application's import journal is a conflict, even if its contents appear to
+match. Native inspection never adopts that book or overwrites conflicting data. Missing user sources or failed user lookups
+are reported; source refresh/cache reconciliation remains part of the pending import workflow. Configuration/user assessments
+retain `import_ready: false`; target folder verification, actual SOGo imports, final readback and activation remain pending.
 
 ## PostfixAdmin source logins
 
@@ -363,6 +405,7 @@ which remains pending; an alias-only batch with no mailbox logins needs no login
 After users have saved drafts and closed clients, `--action freeze --apply` excludes exactly the planned mailbox usernames,
 reloads Dovecot, clears their authentication caches and disconnects their sessions. Before changing logins, it checks the
 delivery prerequisites described below and the saved RoundCube snapshot/session preview with draft confirmation.
+Required SOGo target settings must also pass their live preflight, with no configuration restart pending.
 These blockers stop freeze, while login release remains available.
 Each account must produce the expected
 absent-entry authentication result, and session checks must show no remaining connections. Unexpected command failures stop
@@ -482,6 +525,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `source_logins`, `sources.logins` | PostfixAdmin login-query exclusions, source configuration backups, session checks and guarded release. |
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
+| `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory` | SOGo configuration preview/application, native backups and conflict inspection. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
