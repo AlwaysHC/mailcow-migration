@@ -157,11 +157,14 @@ class SogoTarget:
         with self.native_record(username, content) as folder:
             self.command(("sogo-tool", "restore", "-f", "Contacts/" + book, folder, username))
 
-    def set_user_value(self, section: str, username: str, key: str, value: Any) -> None:
+    def set_user_value(self, section: str, username: str, key: str, value: Any, *, generate_sieve: bool = False) -> None:
         if section not in ("defaults", "settings") or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", key):
             raise MigrationError("Unsupported SOGo preference section or key")
+        if generate_sieve and (section != "defaults" or key != "SOGoSieveFilters"):
+            raise MigrationError("Native Sieve generation requires the SOGoSieveFilters defaults key")
         with self.native_record(username, json.dumps({key: value}, ensure_ascii=False, allow_nan=False)) as folder:
-            self.command(("sogo-tool", "user-preferences", "set", section, username, key, "-f", folder + "/" + username))
+            self.command(("sogo-tool", "user-preferences", "set", section, username, key, "-f", folder + "/" + username,
+                          *(("-p", "/etc/sogo/sieve.creds", "-F") if generate_sieve else ())))
 
     def restore_preferences(self, username: str, preferences: list) -> None:
         preference_pair({"preferences": preferences}, username)

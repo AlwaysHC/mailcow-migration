@@ -120,7 +120,12 @@ Configuration generation is available in the current development version.
 - [ ] **Configure:** Convert PostfixAdmin vacations and forwarding into supported SOGo/Sieve settings, preserving enabled state,
   date windows, interval semantics, and local-copy/filter ordering. Timezone and zero-interval policies must be explicit.
   Source mapping and assessment are implemented, including whole-day timezone checks for inactive and expired records.
-  Target timezone agreement, import and verification remain pending. Prior autoresponder reply history is not transferred.
+  Target timezone agreement, import and verification are implemented internally; CLI/workflow integration remains pending.
+  Prior autoresponder reply history is not transferred.
+- [x] Implement the native SOGo vacation/forwarding backend using the reviewed webmail proposal and completed filter import.
+  Check both containers' vacation timezones, existing preferences and active/stored scripts; retain prefilter forwarding when
+  personal rules control the local copy. Preserve unrelated settings, verify generated vacation date guards and stop on uncertain
+  writes with private backups. Native completion remains separate from full webmail completion and target release.
 - [x] Stage reviewed PostfixAdmin forwarding/vacation prefilters inactive before activation.
   Reproduce the saved proposal at its original planning time, retain exact matching inactive filters, block conflicting or active
   filters, and record API intent before writes. Reconcile uncertain results without repeating requests and verify inactive readback.
@@ -203,6 +208,7 @@ Configuration generation is available in the current development version.
   Inactive prefilter staging retains source/policy identity and reconciles uncertain API outcomes against live target data.
   Sender-permission staging preserves baseline ACLs and security attributes, with request reconciliation and live readback.
   Editable-filter imports retain source identity, native backups and pending preference receipts; unrelated drift blocks resumption.
+  Native vacation/forwarding imports retain per-user snapshots and stop on pending writes until explicit reconciliation.
   Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.

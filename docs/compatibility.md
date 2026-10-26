@@ -13,6 +13,7 @@ SOGo configuration preparation, native user-data conflict inspection and target 
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 The native SOGo import backend is implemented internally, with no import command yet.
 The editable-filter backend also implements native preference and stored/active script readback, pending workflow integration.
+Native vacation/forwarding import and timezone/prefilter verification are implemented internally with the same integration limitation.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
@@ -209,6 +210,13 @@ editable-filter support and the enabled capabilities needed by the converted rul
 preference dictionaries. `sogo-tool restore -p` must accept XML property lists and retain unrelated defaults/settings.
 The backend verifies both stored and active script contents and preserves private pending receipts on failure. It has no CLI
 entry point yet; a caller must enforce completed transfer, activation and isolation prerequisites with stopped writers.
+
+The native vacation/forwarding backend additionally requires `date -d @SECONDS "+%F %T"` in both SOGo and Dovecot containers,
+with results matching the policy timezone at each vacation boundary. Native preference imports require readable
+`/etc/sogo/sieve.creds` for the SOGo user and support for `sogo-tool user-preferences set ... -p /etc/sogo/sieve.creds -F` when
+generating delivery scripts. Active vacations must generate the expected inclusive `currentdate` date guards. Prefilter handoff
+uses `get/filters/all` and `edit/filter` only for a matching staged filter; readback verifies its ID, owner, type, body, label and
+activity. Pending settings writes require reconciliation before another attempt. This backend also has no CLI entry point yet.
 
 | Location | Commands or facilities |
 | --- | --- |

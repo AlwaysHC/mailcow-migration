@@ -55,6 +55,11 @@ def enabled(value: Any) -> bool:
     return source_string(value).lower() in ("yes", "true", "1")
 
 
+def enabled_setting(defaults: Mapping[str, Any], key: str) -> bool:
+    value = defaults.get(key)
+    return isinstance(value, dict) and enabled(value.get("enabled"))
+
+
 def preference_value(key: str, value: Any) -> Any:
     if key == "SOGoSieveFilters" and isinstance(value, list):
         return [{**row, "active": identity_flag(row.get("active", MISSING))} if isinstance(row, dict) else row for row in value]

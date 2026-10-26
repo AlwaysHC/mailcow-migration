@@ -12,6 +12,7 @@ Guarded personal/default Sieve installation and compilation are available separa
 Reviewed forwarding/vacation prefilters can be staged inactive with API readback and uncertain-request reconciliation.
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
 Native editable SOGo filter import is implemented internally, with backups, conflict checks and script/preference readback.
+Native vacation/forwarding import is also implemented internally, including container timezone checks and prefilter handoff.
 Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -602,8 +603,33 @@ Once complete, subsequent target user edits are retained. This receipt keeps `im
 
 This backend has no CLI command yet. Its caller must hold the workspace lock and supply checks for final mail/Sieve transfer,
 activation, source/target isolation and unchanged source data. Applying also requires explicit stopped-writer confirmation.
-Source exports and readiness are rechecked before completion. Native vacation/forwarding settings, timezone checks and the
-full webmail workflow remain pending; Plesk scripts remain on their separate copy/compile path.
+Source exports and readiness are rechecked before completion. Native vacation/forwarding settings use the separate backend
+below; full webmail workflow integration remains pending. Plesk scripts remain on their separate copy/compile path.
+
+### Native vacation and forwarding backend
+
+The internal settings importer uses the saved webmail proposal and policy, reproduced from the original export at its planning
+time. It requires completed editable-filter import and validates any existing prefilter staging journal against the same plan,
+target and evidence. It checks all remaining users before changing preferences, scripts or prefilters.
+
+Existing Vacation/Forward settings must be empty or equal to the proposal. Enabled settings absent from the proposal and
+enabled notifications block regeneration. The editable rules and active/stored Sieve must still match the export. Both the
+SOGo and Dovecot containers must render each vacation boundary in the policy's `vacationTimeZone`, including inactive vacations.
+Supported date windows, reply intervals and enabled states come from the reviewed proposal; reply history is not transferred.
+
+For each user, the backend saves a private snapshot and pending receipt, updates only a matching staged prefilter, and restores
+the proposed preferences while preserving other defaults/settings. Forwarding remains in the Mailcow prefilter when personal
+rules must control the local copy; otherwise the staged forwarding/vacation prefilter is disabled as native settings take over.
+Active editable rules or native Vacation/Forward settings trigger SOGo script generation through its installed Sieve credentials.
+Readback checks the complete preferences, active stored script, enabled vacation date guards and any changed prefilter.
+
+The private `sogo-settings/state.json` records each verified user's settings/script and sets `settings_complete` only at the end.
+Any pending user blocks another attempt until the uncertain operation and backups are reconciled; writes are never blindly
+repeated. Completed imports retain subsequent user edits. The receipt keeps `import_complete: false` and does not authorize release.
+
+This backend has no CLI command yet. Its caller must hold the shared lock and enforce final mail/Sieve transfer, activation,
+source/target isolation and unchanged source data. Applying requires explicit stopped-writer confirmation. Command integration,
+full webmail completion and target release remain pending.
 
 ## PostfixAdmin source logins
 
@@ -747,6 +773,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
 | `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
 | `targets.sogo_filters`, `targets.sieve_runtime` | Internal editable-filter import, native preference preservation and Dovecot script readback. |
+| `targets.sogo_settings`, `plans.saved_webmail` | Internal native vacation/forwarding import, timezone/prefilter verification and shared saved-proposal checks. |
 | `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |
 | `sieve`, `targets.sieve` | Exported filter selection, conflict backups, guarded installation/removal and native compilation. |
 | `prefilters` | Inactive forwarding/vacation filter staging, target conflict checks and API request reconciliation. |

@@ -6,7 +6,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from .mailcow import MailcowTarget
 from .sieve_runtime import SieveRuntime, same_script
 from .sogo import SogoTarget, missing_user_sources
-from .sogo_values import enabled, equal_values, preference_equal, preference_pair, property_list
+from .sogo_values import enabled_setting, equal_values, preference_equal, preference_pair, property_list
 from ..configuration import Configuration
 from ..core.errors import ConfigurationError, MigrationError
 from ..core.state import require_identity
@@ -107,8 +107,7 @@ class SogoFilterImport:
         if current is not MISSING and current != [] and not matches:
             raise MigrationError(username + ": existing editable SOGo filters conflict with the import; no overwrite performed")
         for key in ("Vacation", "Forward", "Notification"):
-            value = preferences[0].get(key)
-            if isinstance(value, dict) and enabled(value.get("enabled")):
+            if enabled_setting(preferences[0], key):
                 raise MigrationError(username + ": enabled SOGo " + key + " must be reconciled before replacing its script")
         if record is not None:
             if not equal_values(other_preferences(preferences), other_preferences(record["preferences"])):

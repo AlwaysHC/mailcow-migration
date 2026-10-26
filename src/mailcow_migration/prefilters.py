@@ -1,17 +1,13 @@
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence, Tuple
 
 from .configuration import Configuration
 from .core.errors import MigrationError
 from .core.state import OperationJournal, Workspace
-from .core.storage import json_fingerprint, read_json
-from .plans.evidence import load_plan_export
-from .plans.forwarding import mailbox_forwardings
-from .plans.policy import load_policy
+from .core.storage import json_fingerprint
+from .plans.evidence import ExportEvidence, load_plan_export
 from .plans.saved import load_saved_plan
-from .plans.sieve_evidence import load_sieve_evidence
-from .plans.webmail import webmail_assessment
+from .plans.saved_webmail import SavedWebmail, load_saved_webmail
 from .targets.mailcow import MailcowTarget
 from .targets.reconciliation import api_number, api_string, reconcile_pending
 from .targets.sieve import SieveSource
@@ -48,6 +44,25 @@ def validate_prefilter_journal(state: Mapping[str, Any], operations: Mapping[str
         raise MigrationError("Prefilter request has no pending operation; retain the journal for reconciliation")
 
 
+def prefilter_staging(
+    context: TransferContext, evidence: ExportEvidence, reviewed: SavedWebmail,
+) -> Tuple[OperationJournal, Mapping[str, Mapping[str, Any]]]:
+    batch, policy, forwarding = context.batch, reviewed.policy, reviewed.forwarding
+    filters = reviewed.proposal["prefilters"]
+    usernames = {row["username"] for row in batch.plan["mailboxes"]}
+    if (len({row["username"] for row in filters}) != len(filters)
+            or any(row["username"] not in usernames or row.get("filter_type") != "prefilter"
+                   or type(row.get("active")) is not int or row["active"] != 0 for row in filters)):
+        raise MigrationError("Prefilter staging requires one inactive filter per planned mailbox")
+    forwarders = {row["username"] for row in forwarding["forwardings"]}
+    operations = {("stage forwarding " if row["username"] in forwarders else "stage vacation ") + row["username"]: row for row in filters}
+    identity = {**context.identity, "kind": "mailcow-prefilter-staging", "filters": filters,
+                "policy": {key: policy.get(key) for key in ("vacationZeroIntervalDays", "vacationDatesAreUtc")},
+                "plannedAt": reviewed.proposal["checked_at"], "forwardingsHash": json_fingerprint(forwarding["forwardings"], canonical=True),
+                "evidenceHash": SieveSource.read(batch.plan, evidence).fingerprint()}
+    return OperationJournal(Workspace(batch.directory), "prefilters.json", identity), operations
+
+
 def run_prefilters(configuration: Configuration, file: Path, exported: Path, *, apply: bool = False) -> int:
     require_mailcow_host()
     with Workspace().lock():
@@ -55,40 +70,12 @@ def run_prefilters(configuration: Configuration, file: Path, exported: Path, *, 
         context = TransferContext(batch, configuration)
         context.before_transfer()
         evidence = load_plan_export(configuration, batch, exported)
-        saved = read_json(batch.directory / "webmail-plan.json", private=True)
-        if (not isinstance(saved, dict) or saved.get("version") != 1 or saved.get("kind") != "source-webmail-plan"
-                or saved.get("target_verified") is not False or not isinstance(saved.get("checked_at"), str)):
-            raise MigrationError("Missing or invalid saved webmail proposal; retain the planning evidence")
-        try:
-            planned_at = datetime.fromisoformat(saved["checked_at"])
-        except ValueError as error:
-            raise MigrationError("Invalid saved webmail planning time") from error
-        if planned_at.tzinfo is None:
-            raise MigrationError("Saved webmail planning time must include its timezone")
-        policy = load_policy(str(batch.directory / "policy.json"))
-        forwarding = mailbox_forwardings(batch.plan)
-        scripts = load_sieve_evidence(batch.plan, evidence)
-        planned = webmail_assessment(batch.plan, scripts, policy, batch.source.kind, forwarding["forwardings"], now=planned_at)
-        if json_fingerprint(saved, canonical=True) != json_fingerprint(planned, canonical=True):
-            raise MigrationError("Saved webmail proposal differs from its export or policy; reconcile it before staging filters")
-        blockers = [row["id"] + ": " + row["detail"] for row in (*forwarding["checks"], *planned["checks"])
-                    if row["status"] in ("blocked", "decision")]
-        if blockers:
-            raise MigrationError("Mailbox filter staging is blocked:\n" + "\n".join(blockers))
-        filters = planned["prefilters"]
-        usernames = {row["username"] for row in batch.plan["mailboxes"]}
-        if (len({row["username"] for row in filters}) != len(filters)
-                or any(row["username"] not in usernames or row.get("filter_type") != "prefilter"
-                       or type(row.get("active")) is not int or row["active"] != 0 for row in filters)):
-            raise MigrationError("Prefilter staging requires one inactive filter per planned mailbox")
-        forwarders = {row["username"] for row in forwarding["forwardings"]}
-        operations = {("stage forwarding " if row["username"] in forwarders else "stage vacation ") + row["username"]: row for row in filters}
-        identity = {**context.identity, "kind": "mailcow-prefilter-staging", "filters": filters,
-                    "policy": {key: policy.get(key) for key in ("vacationZeroIntervalDays", "vacationDatesAreUtc")},
-                    "plannedAt": saved["checked_at"], "forwardingsHash": json_fingerprint(forwarding["forwardings"], canonical=True),
-                    "evidenceHash": SieveSource.read(batch.plan, evidence).fingerprint()}
+        reviewed = load_saved_webmail(batch, evidence)
+        if reviewed.blockers:
+            raise MigrationError("Mailbox filter staging is blocked:\n" + "\n".join(reviewed.blockers))
+        filters = reviewed.proposal["prefilters"]
+        journal, operations = prefilter_staging(context, evidence, reviewed)
         evidence.verify()
-        journal = OperationJournal(Workspace(batch.directory), "prefilters.json", identity)
         state = journal.read()
         validate_prefilter_journal(state, operations)
         if apply:
