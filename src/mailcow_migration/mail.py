@@ -1,93 +1,34 @@
 import os
-import sys
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
 from uuid import uuid4
 
-from .accounts import account_journal, account_mutations, require_before_activation, validate_account_journal, verify_account_inventory
 from .configuration import Configuration
 from .core.commands import run_command
-from .core.errors import ConfigurationError, MigrationError
+from .core.errors import MigrationError
 from .core.rsync import append_maildir
-from .core.state import Workspace, require_identity
-from .core.storage import local_path, private_directory, read_json, write_private_json
-from .plans.recovery import recovery_plan
-from .plans.saved import SavedPlan, load_saved_plan, validate_plan_inventory
+from .core.state import Workspace
+from .core.storage import local_path, private_directory
+from .plans.saved import load_saved_plan, validate_plan_inventory
 from .plans.transfer import MAILDIR_CHECK, SENDER_OPTIONS, assert_append_compatible, receiver_options, rsync_capabilities, target_maildir
-from .sources import SourceKind
-from .sources.delivery import SourceDelivery
 from .sources.inventory import inspect_source
-from .sources.logins import SourceLogins
 from .sources.maildirs import mailbox_path, source_identity
-from .sources.roundcube import roundcube_sessions
-from .targets.account_inventory import account_inventory
-from .targets.isolation import TargetIsolation
 from .targets.mailcow import MailcowTarget
 from .targets.readiness import inspect_target_host
 from .targets.storage import inspect_mail_storage
+from .transfers import TransferContext, require_transfer_host
 
 
 @dataclass(frozen=True)
-class MailTransfer:
-    batch: SavedPlan
-    configuration: Configuration
-
-    @property
-    def file(self) -> Path:
-        return local_path(self.batch.directory / "transfers.json")
-
-    @property
-    def identity(self) -> Mapping[str, Any]:
-        return {"version": 1, "kind": "mailcow-transfer", "hash": self.batch.fingerprint, "source": asdict(self.batch.source),
-                "api": self.configuration.mailcow.api, "mailcow_directory": self.configuration.mailcow.directory}
-
-    def state(self) -> Mapping[str, Any]:
-        if not self.file.exists():
-            return {**self.identity, "mailPending": False, "finalMail": False, "sieve": False, "sievePending": False}
-        state = read_json(self.file, private=True)
-        if (not isinstance(state, dict) or type(state.get("version")) is not int
-                or any(type(state.get(key)) is not bool for key in ("mailPending", "finalMail", "sieve", "sievePending"))
-                or state["mailPending"] and state["finalMail"]):
-            raise MigrationError("Invalid transfer journal; retain " + str(self.file))
-        require_identity(state, self.identity)
-        return state
-
-    def save(self, state: Mapping[str, Any], **changes: Any) -> Mapping[str, Any]:
-        following = {**state, **changes}
-        write_private_json(self.file, following, replace=True)
-        return following
-
-    def check_isolation(self, target: MailcowTarget) -> None:
-        state = account_journal(self.batch, self.configuration).read()
-        require_before_activation(state)
-        if state.get("accounts") is not True:
-            raise MigrationError("Complete account staging for this plan before copying mail")
-        recovery = recovery_plan(self.batch.plan)["emails"]
-        validate_account_journal(state, account_mutations(self.batch.plan, recovery, reuse_domain=bool(state.get("existingDomain"))))
-        verify_account_inventory(self.batch.plan, account_inventory(target.api), recovery, state)
-        isolation = TargetIsolation(target, self.batch)
-        paused = isolation.state()
-        if paused.get("paused") is not True or paused.get("released") or paused.get("pending") or paused.get("routePending"):
-            raise MigrationError("Complete target-isolation pause before copying mail; retain and resume any pending operation")
-        isolation.check()
-        if self.batch.plan["mailboxes"]:
-            SourceLogins(self.batch).check()
-        SourceDelivery(self.batch, self.configuration.mailcow.api).check()
-        roundcube_sessions(self.batch, self.configuration).check()
-
+class MailTransfer(TransferContext):
     def run(self, *, apply: bool, final: bool) -> None:
-        if self.batch.source.kind is not SourceKind.POSTFIXADMIN:
-            raise MigrationError("Mail copying requires implemented source isolation; the Plesk isolation adapter is still pending")
-        require_before_activation(account_journal(self.batch, self.configuration).read())
+        self.before_transfer()
         state = self.state()
         if apply:
             state = self.save(state, mailPending=True, finalMail=False, mailStage="preflight", mailbox=None)
             print("Mail transfer journal: {}. This attempt invalidates any earlier final pass.".format(self.file))
         directory = local_path(self.batch.directory / "mail-transfer")
         try:
-            if self.batch.blocking_findings:
-                raise MigrationError("Resolve saved planning findings before copying mail:\n" + self.batch.blocking_findings)
             target = MailcowTarget(self.configuration.mailcow)
             self.check_isolation(target)
             inspect_target_host(target)
@@ -99,9 +40,9 @@ class MailTransfer:
             if measured is not None and (not isinstance(measured, dict) or any(
                     measured.get(key) != identity.get(key) for key in ("host", "root", "subdir"))):
                 raise MigrationError("Mail source differs from the source used to calculate quotas; retain and reconcile the saved plan")
-            binding = {"mailSource": identity, "containerRoot": str(storage.root), "uid": storage.uid, "gid": storage.gid}
-            if any(key in state and state[key] != value for key, value in binding.items()):
-                raise MigrationError("Source, mail volume or vmail ownership changed since transfer started; retain the journal")
+            binding = {"mailSource": identity, **self.storage_binding(state, storage)}
+            if "mailSource" in state and state["mailSource"] != identity:
+                raise MigrationError("Mail source changed since transfer started; retain the journal")
             if apply:
                 state = self.save(state, **binding)
             private_directory(directory)
@@ -168,11 +109,8 @@ class MailTransfer:
 
 
 def run_mail(configuration: Configuration, file: Path, *, apply: bool = False, final: bool = False, writers_stopped: bool = False) -> int:
-    if sys.platform != "linux" or os.geteuid() != 0:
-        raise ConfigurationError("Run mail transfer on the Linux Mailcow host as root")
-    if not writers_stopped:
-        raise ConfigurationError("Use --writers-stopped only after stopping batch writers, submission and account administration on both servers")
+    require_transfer_host(writers_stopped)
     with Workspace().lock():
         MailTransfer(load_saved_plan(file, configuration), configuration).run(apply=apply, final=final)
-    print("Keep source and target isolation in place. Sieve, activation, integrated webmail import and handoff remain pending.")
+    print("Keep both servers isolated until Sieve, webmail, activation and handoff checks are complete.")
     return 0

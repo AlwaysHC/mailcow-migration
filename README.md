@@ -8,7 +8,8 @@ RoundCube source snapshots, SOGo proposals, session previews and guarded session
 SOGo target preparation can check/configure custom identity support, inspect existing user-data conflicts and assess target folder display state.
 An explicit user-preparation action can refresh missing SOGo user sources and reconcile cached unknown-user lookups.
 Append-only mail copying is available for staged PostfixAdmin batches with isolation checks and explicit stopped-writer confirmation.
-Full source isolation, Sieve installation, activation and full cutover remain pending.
+Guarded personal/default Sieve installation and compilation are available separately.
+Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -26,6 +27,7 @@ This snapshot has not been validated end to end.
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
 | `sogo-target` | Prepare identity settings/user lookups, check effective settings, and inspect native data/folder-state conflicts. |
 | `mail` | Preview or append Maildir files under isolation, preserving existing files and recording applied/final passes. |
+| `sieve` | Preview or install exported personal/default filters, with explicit conflict replacement, backups and target compilation. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -307,8 +309,45 @@ creation without attempting a copy into a nonexistent parent.
 Use `--apply --final` for the final mail pass. Only successful copying followed by live isolation, source inventory and target
 storage checks records `mailPending: false` and `finalMail: true`. An ordinary applied pass records `finalMail: false`.
 No Sieve completion is inferred from mail copying. Disk capacity, fixed-quota suitability, complete account-setting drift
-verification, Sieve installation, quota recalculation, activation and cutover remain separate requirements. Keep both servers
+verification, the separate Sieve step, quota recalculation, activation and cutover remain separate requirements. Keep both servers
 isolated after copying; a final mail receipt does not authorize access restoration or mark the migration complete.
+
+## Sieve installation
+
+Use the completed source export selected during planning and the same stopped-writer/isolation prerequisites as mail copying:
+
+```bash
+mailcow-migrate sieve --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json \
+  --export /root/mailcow-in-progress/exports/example.org/EXPORT_ID --writers-stopped
+```
+
+The default action previews the entire batch without writing, compiling or removing target scripts. It validates the export's
+completion manifest, file hashes, domain/source identity and saved export ID. Missing inactive-script inventory, additional
+inactive scripts and unsupported PostfixAdmin filter syntax block installation before target writes.
+
+Personal scripts are selected when present, including empty scripts. Add `--use-default-sieve` to select the exported default
+for mailboxes without a personal script. Without that flag, those mailboxes use Mailcow's default filtering and their personal
+script/binary must be absent. The selection does not change Mailcow's shared default script.
+
+Conflicting target scripts, or stale compiled files when no source script is selected, block the step unless
+`--replace-sieve` is supplied. Preview the intended selection/replacement, then add `--apply` to install it. Conflicting script
+and binary bytes are backed up under a private `sieve-backup-*` directory before replacement or removal. Backups are checked
+against the inspected bytes and recorded in the transfer journal; reruns retain earlier backups.
+
+The whole batch is inspected first. Paths must stay within the export or existing target Sieve directory and use regular files
+and directories, including ancestors of missing files. Symlinks and changed files block continuation. Installed script bytes
+are preserved, owned by vmail with mode 600, and compiled using `sievec` as vmail inside `dovecot-mailcow`. Installed bytes and
+the compiled file are checked afterward. Selecting target default filtering removes only the inspected personal script and
+its compiled file, with backup/replacement permission when they conflict.
+
+Each applied attempt clears `sieve` and sets `sievePending` before export, container or filesystem checks. Success records the
+exported script fingerprint and default-selection choice, then sets `sieve: true` and `sievePending: false` after renewed
+isolation/storage checks. Mail completion fields are retained separately. Failures leave the pending state and any backups;
+reruns inspect the actual files again, and any new conflict still requires explicit replacement permission.
+
+This step currently supports PostfixAdmin. It installs exported filters but does not import editable SOGo filters, apply
+vacation/forwarding settings, recalculate quota, activate accounts or release isolation. Those steps and full source-drift
+verification remain separate; keep source administration and user edits frozen while using the saved export.
 
 ## RoundCube snapshots and sessions
 
@@ -622,7 +661,8 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
 | `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
 | `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
-| `mail`, `core.rsync` | Guarded Maildir append/preview, native rsync progress and transfer receipts. |
+| `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |
+| `sieve`, `targets.sieve` | Exported filter selection, conflict backups, guarded installation/removal and native compilation. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

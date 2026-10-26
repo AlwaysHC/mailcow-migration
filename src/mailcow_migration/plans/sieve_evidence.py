@@ -21,6 +21,11 @@ class SieveEvidence:
         return self.default_sieve if personal is None else personal
 
 
+def sieve_inventory_blockers(evidence: SieveEvidence) -> list:
+    return (["Inactive Sieve inventory is missing; refresh the source export"] if evidence.inactive_sieve is None else
+            ["Inactive Sieve script has no editable SOGo mapping: " + file for file in evidence.inactive_sieve])
+
+
 def load_sieve_evidence(plan: Mapping[str, Any], evidence: ExportEvidence) -> SieveEvidence:
     if evidence.source.connection.kind is SourceKind.POSTFIXADMIN:
         scripts = {row["username"]: optional_export_text(evidence, "sieve", plan["domain"], row["payload"]["local_part"], ".dovecot.sieve")

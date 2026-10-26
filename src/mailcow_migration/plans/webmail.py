@@ -7,7 +7,7 @@ from .domain import active
 from .forwarding import mailbox_filter_plans, sieve_string
 from .native_settings import mailbox_sieve, native_mailbox_settings, utc_date, vacation_days, vacation_timestamp, valid_vacation_days
 from .sieve import SieveMappingError
-from .sieve_evidence import SieveEvidence
+from .sieve_evidence import SieveEvidence, sieve_inventory_blockers
 from ..core.errors import MigrationError
 from ..core.storage import json_fingerprint
 from ..core.timezones import timezone_parts
@@ -120,8 +120,7 @@ def webmail_assessment(
         missing = sum(evidence.scripts.get(row["username"]) is None for row in plan["mailboxes"])
         checks.append(check("default-filtering", "not-needed" if not missing else "planned" if evidence.default_sieve is not None else "unknown",
                             "{} mailboxes without personal filters; select the exported default when installing Sieve".format(missing)))
-        inactive = (["Inactive Sieve inventory is missing; refresh the source export"] if evidence.inactive_sieve is None else
-                    ["Inactive Sieve script has no editable SOGo mapping: " + file for file in evidence.inactive_sieve])
+        inactive = sieve_inventory_blockers(evidence)
         checks.append(check("inactive-sieve", "blocked" if inactive else "not-needed",
                             "\n".join(inactive) if inactive else "No inactive Sieve scripts to migrate"))
         users = [converted.get(row["username"]) or {"username": row["username"], "script": evidence.script(row["username"]),

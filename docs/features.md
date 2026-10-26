@@ -88,7 +88,7 @@ Configuration generation is available in the current development version.
 - [x] Provide guarded PostfixAdmin mail preview/apply with explicit stopped-writer confirmation and live isolation/inventory checks.
   Check all source Maildirs before copying, reuse checksum conflict checks, preserve existing files and show rsync counts/progress.
   Bind private transfer receipts to source/target identity, clear prior final-pass eligibility before each applied attempt,
-  and record a final pass only after copying and renewed checks. Sieve, quota recalculation and activation remain pending.
+  and record a final pass only after copying and renewed checks. Sieve is a separate step; quota recalculation and activation remain pending.
 - [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
   Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
 - [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
@@ -99,6 +99,10 @@ Configuration generation is available in the current development version.
 
 - [ ] **Preserve:** Inventory and copy supported personal/default Sieve, compile it on the target, and preserve activation state.
   Default-filter selection and replacing existing target scripts require explicit decisions and backups.
+- [x] Provide guarded PostfixAdmin Sieve preview/apply using the planning export and shared transfer isolation/journal checks.
+  Preserve personal/default selection, inactive/unsupported-script blockers, full-batch inspection, regular-file/ancestor checks,
+  private conflict backups, vmail ownership and native compilation. Clear earlier Sieve completion before each applied attempt.
+  Plesk installation, editable SOGo integration and full activation verification remain pending.
 - [x] **Preserve:** Convert the supported PostfixAdmin Sieve subset into planned editable SOGo filters.
   Save personal/default scripts, converted rules, blockers, native preferences and staging prefilters in a private webmail plan.
   Keep Plesk personal Sieve and forwarding scripts on their copy/compile path without imposing editable-filter conversion.
@@ -182,6 +186,7 @@ Configuration generation is available in the current development version.
   PostfixAdmin login controls retain a resumable operation journal and support release before activation.
   Source delivery retains operation stages, source configuration backups and recipient-isolation evidence; delivery release remains pending.
   Mail copying retains pending/final-pass receipts and resumes through fresh checks and append-only copying.
+  Sieve installation shares transfer identity/isolation checks and retains pending stages, export fingerprints and conflict backups.
   Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.

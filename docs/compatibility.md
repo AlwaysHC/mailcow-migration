@@ -13,7 +13,8 @@ SOGo configuration preparation, native user-data conflict inspection and target 
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 The native SOGo import backend is implemented internally, with no import command yet.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
-Integrated webmail imports, full source isolation, Sieve installation, activation and full recovery remain planned work.
+Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
+Integrated webmail imports, full source isolation, native SOGo filter/settings integration, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
@@ -181,6 +182,12 @@ Both rsync endpoints are probed. SSH retains strict host-key checking and the co
 Progress is streamed to the terminal; inspection/count diagnostics are private. Interrupted copies retain their transfer journal.
 The required `--writers-stopped` confirmation covers submission, hidden custom writers and account administration that automatic
 checks cannot fully establish. A final mail pass does not certify Sieve, quota recalculation, webmail import or full cutover.
+
+The `sieve` command additionally requires the completed planning export, an existing regular Sieve directory inside the mail
+volume, and effective Dovecot `plugin/sieve` equal to `/var/vmail/sieve/%u.sieve`. It uses GNU `install` for mode/ownership and
+`sievec` as the container's `vmail` user. Exported scripts must pass the supported PostfixAdmin syntax/mapping checks; compiled
+files must remain regular files. Preview never invokes the compiler or changes target scripts. Applied compilation failures
+retain pending state and recovery backups; shared defaults, native SOGo preferences and account activation are separate.
 
 | Location | Commands or facilities |
 | --- | --- |

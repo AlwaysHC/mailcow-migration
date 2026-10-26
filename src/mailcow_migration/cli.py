@@ -15,6 +15,7 @@ from .mail import run_mail
 from .planning import run_plan
 from .roundcube_sessions import run_roundcube_sessions
 from .sogo_target import run_sogo_target
+from .sieve import run_sieve
 from .source_delivery import run_source_delivery
 from .source_logins import run_source_logins
 from .wizard import configure
@@ -24,7 +25,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="mailcow-migrate", description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
         epilog="Preparation, account staging, target isolation and PostfixAdmin login and delivery controls are available. "
-               "Append-only mail transfer requires staged accounts and stopped writers. Full isolation and activation remain pending.",
+               "Mail/Sieve transfers require staged accounts and stopped writers. Full isolation and activation remain pending.",
     )
     result.add_argument("--version", action="version", version="%(prog)s " + __version__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -42,6 +43,7 @@ def parser() -> argparse.ArgumentParser:
         ("roundcube-sessions", "Preview RoundCube user data and batch sessions; revoke or check sessions under verified source isolation"),
         ("sogo-target", "Preview or configure required SOGo settings and inspect existing user-data conflicts"),
         ("mail", "Preview or append source Maildirs under verified isolation; preserve existing target files"),
+        ("sieve", "Preview or install exported personal/default Sieve with explicit replacement, backups and compilation"),
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE", help="JSON configuration file")
@@ -49,19 +51,27 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("domain", metavar="DOMAIN", help="Lowercase primary mail domain")
         if name == "inspect":
             command.add_argument("--output", type=Path, metavar="FILE", help="Save a private JSON report to a new file")
-        if name == "plan":
+        if name in ("plan", "sieve"):
             command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
+        if name == "plan":
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
-        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "roundcube-sessions", "sogo-target", "mail"):
+        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery",
+                    "roundcube-sessions", "sogo-target", "mail", "sieve"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
-        if name == "mail":
-            command.add_argument("--apply", action="store_true", help="Append missing Maildir files and journal the result")
-            command.add_argument("--final", action="store_true", help="Record a final mail pass only after an applied copy and live checks succeed")
+        if name in ("mail", "sieve"):
+            command.add_argument("--apply", action="store_true", help="Apply the selected transfer and journal its result")
             command.add_argument("--writers-stopped", action="store_true",
                                  help="Confirm batch writers, submission and account administration are stopped on both servers")
+        if name == "mail":
+            command.add_argument("--final", action="store_true", help="Record a final mail pass only after an applied copy and live checks succeed")
+        if name == "sieve":
+            command.add_argument("--use-default-sieve", action="store_true",
+                                 help="Use the exported default only for mailboxes without a personal script")
+            command.add_argument("--replace-sieve", action="store_true",
+                                 help="Back up and replace/remove conflicting target scripts and compiled files")
         if name == "target-isolation":
             command.add_argument("--action", choices=("preview", "pause", "check", "release"), default="preview",
                                  help="Defaults to read-only preview")
@@ -119,6 +129,9 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command == "mail":
             return run_mail(load_configuration(options.config), options.plan, apply=options.apply,
                             final=options.final, writers_stopped=options.writers_stopped)
+        elif options.command == "sieve":
+            return run_sieve(load_configuration(options.config), options.plan, options.export, apply=options.apply,
+                             use_default=options.use_default_sieve, replace=options.replace_sieve, writers_stopped=options.writers_stopped)
         else:
             load_configuration(options.config)
             print("Configuration is valid. Credential files and server connectivity have not been checked.")
