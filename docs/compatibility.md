@@ -8,7 +8,7 @@ It is not an end-to-end certification of the listed product versions.
 
 Configuration, source inspection, private domain exports, planning and inactive account staging are implemented.
 Target isolation and PostfixAdmin login and delivery controls are available separately.
-RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
+RoundCube snapshots, SOGo proposals, session revocation and native import support both source isolation paths.
 SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 The PostfixAdmin webmail command connects RoundCube import, editable filters and native vacation/forwarding settings with readback.
@@ -19,7 +19,7 @@ Personal/default Sieve installation and compilation are available for PostfixAdm
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
 Explicit sender-permission staging and read-only verification are also available.
 Domain administrator preview/import/check supports reviewed PostfixAdmin mappings and preserves existing target memberships/security.
-Plesk source isolation, mail/Sieve transfer, activation and quota recalculation are implemented; Plesk webmail integration,
+Plesk source isolation, mail/Sieve transfer, activation, quota recalculation and native RoundCube import are implemented;
 full PostfixAdmin submission isolation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -84,7 +84,7 @@ Restoration remains gated on completed activation, quota recalculation and verif
 restoration for the same plan and target, without pending operations. It retains that journal, saves current settings in a
 separate repair journal and reuses guard files only when their content matches the intended guard or prior recorded final content.
 Readiness and restoration select an existing repair journal without falling back to the original. Source isolation and webmail
-import prerequisites still apply independently; this target mode does not enable Plesk import.
+import prerequisites still apply independently for each source adapter.
 
 ## Initial compatibility matrix
 
@@ -228,7 +228,8 @@ source/target isolation. Its preview retains private backups without importing u
 deferred until editable-filter import is complete. Preparation and shared-service restarts remain separate explicit actions.
 
 Target release requires a full `mailcow-webmail-import` receipt bound to the batch/source/target, exact completion receipts
-from all three native stages, and completed quota recalculation on the copied volume. A component's completion flag alone is
+from all required native stages (RoundCube for Plesk; all three for PostfixAdmin), and completed quota recalculation on the copied volume.
+A component's completion flag alone is
 insufficient. Completed webmail reruns validate receipt integrity and retain later user edits; webmail import never releases
 access or changes DNS/source routing automatically.
 

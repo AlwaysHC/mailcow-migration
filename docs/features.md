@@ -4,8 +4,8 @@ The first release covers domain-by-domain mail migration from PostfixAdmin or Pl
 Checked items are implemented. Unchecked items are not fully covered; notes distinguish implemented parts from remaining work.
 The pre-alpha supports configuration, source inspection, private exports, planning, staging and account verification.
 PostfixAdmin isolation, mail/Sieve transfer, activation, quota recalculation and webmail import are available as explicit operations.
-Plesk isolation, mail/Sieve transfer, activation and quota recalculation are also available. Webmail integration,
-full handoff and end-to-end validation remain unfinished.
+Plesk isolation, mail/Sieve transfer, activation, quota recalculation and RoundCube import are also available.
+Full handoff and end-to-end validation remain unfinished.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -158,15 +158,16 @@ Configuration generation is available in the current development version.
   Require final mail/Sieve receipts and matching source fingerprints, retain exact target IDs and journal each activity edit.
   Reconcile only confirmed outcomes, reject conflicts and preserve completed native handoffs without enabling duplicate rules.
   The account-activation command supplies the shared lock and live source/target isolation checks.
-- [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
+- [x] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
   Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available.
-  PostfixAdmin import/readback and migration prerequisites are connected; the Plesk isolation/activation path remains pending.
+  Both source paths enforce isolation/activation/quota prerequisites and native readback. Plesk retains its copied personal Sieve;
+  PostfixAdmin additionally imports editable filters and native settings. Completion requires exactly the stages for that source.
 - [x] Map supported RoundCube vCards, collected recipients, identities, preferences and source folder display state into reviewable private proposals.
   Preserve stable record IDs, existing UIDs, defaults, unsupported-data blockers and source snapshot/folder drift checks.
   Record review of an unchanged proposal and explicit deferral of supported receipt/reply-folder preferences before source isolation.
   Target preparation remains separate; webmail import reuses the approved proposal and native conflict/folder checks.
-- [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
+- [x] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
   Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
   Target configuration preview/application for custom identity support is implemented, with explicit shared-restart scope,
   private backups, pending-operation checks and effective-setting readback. Webmail import enforces the required native-filter capabilities.
@@ -189,7 +190,8 @@ Configuration generation is available in the current development version.
   rejects missing, partial, foreign or changed receipts and remains a separate explicit action.
 - [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.
   Preserve exact session ownership/value checks, draft confirmation, zero-session readback and unchanged user-data snapshots.
-  Retain separate receipts and evidence; Plesk preview is available, while its revocation adapter remains pending.
+  Retain separate receipts and evidence for both sources. Activated-batch repair requires held target access, saved drafts,
+  stopped webmail writers and verified source controls before session revocation; it does not recopy accounts or messages.
 - [x] Support separately journaled target isolation for missing webmail imports on an already activated batch.
   Require completed prior target restoration for the same plan and target; preserve its journal and save current access/job settings.
   Reuse owned guards and the existing pause/restore checks. Select the repair journal for import readiness and restoration,
@@ -249,8 +251,10 @@ Configuration generation is available in the current development version.
   Prefilter activation shares staging identity/receipts and verifies uncertain activity edits without repeating them blindly.
   Account activation retains pinned requests, ordered receipts and verification of partially restored activity.
   Full source isolation and other workflow journals remain pending.
-- [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
+- [x] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
+  Refuse activation intent, uncertain requests, missing account evidence after target isolation, and recorded forwarding/completion.
+  PostfixAdmin restores only its login exclusion and retains delivery holds; Plesk restores its journaled access/delivery controls.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.
   Further generalization beyond the configuration wizard and independent source selection is future work.
 - [x] **Preserve:** Detect unfinished batches and coordinate locking across preparation and migration operations.

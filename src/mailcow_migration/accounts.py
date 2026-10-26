@@ -7,7 +7,7 @@ from typing import Any, Mapping, Tuple
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import OperationJournal, Workspace
-from .core.storage import write_private_json
+from .core.storage import local_path, write_private_json
 from .plans.domain import MIB
 from .plans.forwarding import mailbox_forwardings
 from .plans.recovery import recovery_plan
@@ -191,6 +191,17 @@ def account_journal(batch: SavedPlan, configuration: Configuration) -> Operation
 def require_before_activation(state: Mapping[str, Any]) -> None:
     if state.get("pending") or state.get("activated") or "enable domain for activation" in state["done"]:
         raise MigrationError("This operation is forbidden after target activation starts or during an uncertain target write")
+
+
+def require_source_recovery(batch: SavedPlan, configuration: Configuration) -> None:
+    journal = account_journal(batch, configuration)
+    state = journal.read()
+    require_before_activation(state)
+    if "activationRequests" in state or (local_path(batch.directory / "target-isolation.json").exists()
+                                        and not journal.workspace.path(journal.relative_path).exists()):
+        raise MigrationError("Activation intent or missing account evidence requires reconciliation before source recovery")
+    if local_path(batch.directory / "source-forwarding.json").exists() or local_path(batch.directory / "completed.json").exists():
+        raise MigrationError("Source forwarding or completion has been recorded; reconcile handoff instead of releasing source controls")
 
 
 def run_accounts(

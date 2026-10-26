@@ -135,6 +135,9 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--drafts-saved", action="store_true", help="Confirm all migrating users saved browser-only drafts on the server")
             command.add_argument("--reviewed", action="store_true", help="Confirm review of the previously saved, unchanged SOGo proposal")
             command.add_argument("--accept-deferrals", action="store_true", help="Explicitly defer the listed receipt/reply-folder preferences")
+            command.add_argument("--webmail-repair", action="store_true",
+                                 help="Revoke source sessions for unfinished webmail after activation under verified target isolation")
+            command.add_argument("--writers-stopped", action="store_true", help="Confirm custom source webmail writers are stopped for repair")
         if name == "sogo-target":
             command.add_argument("--action", choices=("preview", "configure", "check", "inspect-users", "prepare-users"), default="preview",
                                  help="Defaults to preview; prepare-users refreshes missing sources and cached unknown users before native checks")
@@ -184,7 +187,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command == "roundcube-sessions":
             return run_roundcube_sessions(configuration, options.plan, action=options.action, apply=options.apply,
                                           directory=options.directory, drafts_saved=options.drafts_saved,
-                                          reviewed=options.reviewed, accept_deferrals=options.accept_deferrals)
+                                          reviewed=options.reviewed, accept_deferrals=options.accept_deferrals,
+                                          webmail_repair=options.webmail_repair, writers_stopped=options.writers_stopped)
         elif options.command == "sogo-target":
             return run_sogo_target(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "mail":

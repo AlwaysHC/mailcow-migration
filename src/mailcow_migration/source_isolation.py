@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .accounts import account_journal, require_before_activation
+from .accounts import require_source_recovery
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
@@ -23,7 +23,7 @@ def run_source_isolation(
         if batch.source.kind is not SourceKind.PLESK:
             raise MigrationError("Use source-logins and source-delivery for the current PostfixAdmin isolation path")
         if action != "check":
-            require_before_activation(account_journal(batch, configuration).read())
+            require_source_recovery(batch, configuration)
         source = PleskIsolation(batch, configuration)
         if action == "release":
             source.change("release")

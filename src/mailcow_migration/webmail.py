@@ -20,7 +20,7 @@ from .targets.sogo import SogoTarget
 from .targets.sogo_filters import SogoFilterImport
 from .targets.sogo_import import SogoImport
 from .targets.sogo_settings import SogoSettingsImport
-from .targets.webmail_state import RECEIPTS, WebmailJournal
+from .targets.webmail_state import WebmailJournal
 from .transfers import TransferContext, require_transfer_host
 
 
@@ -30,8 +30,6 @@ def run_webmail(
     require_transfer_host(writers_stopped)
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
-        if batch.source.kind is not SourceKind.POSTFIXADMIN:
-            raise MigrationError("Webmail import requires implemented activation/isolation; the Plesk adapter remains pending")
         journal = WebmailJournal(batch, configuration.mailcow)
         previous = journal.read()
         if previous is not None and previous["complete"]:
@@ -58,11 +56,13 @@ def run_webmail(
                   "webmail_sha256": json_fingerprint(reviewed.proposal, canonical=True)}
         journal.read(inputs)
         native = SogoImport(preparation)
-        filters = SogoFilterImport(SogoTarget(target, local_path(batch.directory / "sogo-filters")), batch, evidence)
-        settings = SogoSettingsImport(filters, configuration)
+        filters = (SogoFilterImport(SogoTarget(target, local_path(batch.directory / "sogo-filters")), batch, evidence)
+                   if batch.source.kind is SourceKind.POSTFIXADMIN else None)
+        settings = SogoSettingsImport(filters, configuration) if filters is not None else None
         native.state()
-        filters.state(filters.users())
-        settings.state(reviewed)
+        if filters is not None and settings is not None:
+            filters.state(filters.users())
+            settings.state(reviewed)
         deferred = len(preparation.proposal["deferredPreferences"])
 
         def verify_ready() -> None:
@@ -71,7 +71,7 @@ def run_webmail(
             QuotaJournal(batch, configuration.mailcow).require_complete(target)
             verify_senders(context, target, inventory)
             verify_admins(context, target)
-            context.check_holds(target)
+            context.check_holds(target, webmail=True)
 
         def check_source() -> None:
             evidence.verify()
@@ -91,11 +91,12 @@ def run_webmail(
                 print("RoundCube preference/contact/folder destinations passed preview checks.")
             else:
                 print("RoundCube native import is complete; its verified receipt is retained.")
-            filters.run(verify_ready=verify_ready, check_source=check_source)
-            if filters.state(filters.users())["filters_complete"]:
-                settings.run(verify_ready=verify_ready, check_source=check_source)
-            else:
-                print("Native vacation/forwarding target checks are deferred until editable-filter import completes.")
+            if filters is not None and settings is not None:
+                filters.run(verify_ready=verify_ready, check_source=check_source)
+                if filters.state(filters.users())["filters_complete"]:
+                    settings.run(verify_ready=verify_ready, check_source=check_source)
+                else:
+                    print("Native vacation/forwarding target checks are deferred until editable-filter import completes.")
             check_source()
             verify_ready()
             print("Webmail preview completed; private backups retained, no import or release receipt written and no user data changed.")
@@ -103,11 +104,16 @@ def run_webmail(
         print("Private webmail import journal: {}.".format(journal.file))
         phases = (
             ("roundcube", lambda: native.apply(verify_ready=verify_ready, check_source=check_source), native.state, "native_complete"),
-            ("filters", lambda: filters.run(verify_ready=verify_ready, check_source=check_source, apply=True, writers_stopped=writers_stopped),
-             lambda: filters.state(filters.users()), "filters_complete"),
-            ("settings", lambda: settings.run(verify_ready=verify_ready, check_source=check_source, apply=True, writers_stopped=writers_stopped),
-             lambda: settings.state(reviewed), "settings_complete"),
         )
+        if filters is not None and settings is not None:
+            phases += (
+                ("filters", lambda: filters.run(verify_ready=verify_ready, check_source=check_source,
+                                                apply=True, writers_stopped=writers_stopped),
+                 lambda: filters.state(filters.users()), "filters_complete"),
+                ("settings", lambda: settings.run(verify_ready=verify_ready, check_source=check_source,
+                                                  apply=True, writers_stopped=writers_stopped),
+                 lambda: settings.state(reviewed), "settings_complete"),
+            )
         receipts: Mapping[str, str] = {}
         for name, operation, read_state, complete in phases:
             journal.write(inputs, name, receipts, deferred)
@@ -119,11 +125,11 @@ def run_webmail(
         check_source()
         verify_ready()
         activate_prefilters(context, evidence, reviewed, verify_ready=verify_ready, activate=False)
-        if receipts != {name: journal.receipt(name) for name in RECEIPTS}:
+        if receipts != {name: journal.receipt(name) for name in journal.receipt_names}:
             raise MigrationError("Native import receipts changed during final verification; webmail remains incomplete")
         journal.write(inputs, "complete", receipts, deferred)
         journal.require_complete()
-        print("Webmail data, editable filters and native settings imported and verified. Target isolation remains paused.")
+        print("Source webmail stages imported and verified: {}. Target isolation remains paused.".format(", ".join(journal.receipt_names)))
         if deferred:
             print("{} approved preference deferrals remain in the saved RoundCube proposal.".format(deferred))
         print("Review the results before target-isolation --action release --apply. "

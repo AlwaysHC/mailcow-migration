@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from .accounts import account_journal, require_before_activation
+from .accounts import require_source_recovery
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
@@ -22,7 +22,7 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
         batch = load_saved_plan(file, configuration)
         logins = SourceLogins(batch)
         if action != "check":
-            require_before_activation(account_journal(batch, configuration).read())
+            require_source_recovery(batch, configuration)
         if not logins.users:
             print("No mailbox logins in this batch; no source login operation is needed.")
             return 0

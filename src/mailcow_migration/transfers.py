@@ -111,7 +111,7 @@ class TransferContext:
             raise MigrationError("Complete target-isolation pause before migration work; retain and resume any pending operation")
         return isolation
 
-    def check_holds(self, target: MailcowTarget) -> None:
+    def check_holds(self, target: MailcowTarget, *, webmail: bool = False) -> None:
         self.target_holds(target).check()
-        check_source_holds(self.batch, self.configuration)
+        check_source_holds(self.batch, self.configuration, webmail=webmail)
         roundcube_sessions(self.batch, self.configuration).check()

@@ -743,7 +743,7 @@ Configuration/user assessments retain `import_ready: false`; account activation 
 
 ## Webmail import
 
-After account activation and quota recalculation, while source and target remain isolated, preview the approved PostfixAdmin webmail import:
+After account activation and quota recalculation, while source and target remain isolated, preview the approved webmail import:
 
 ```bash
 mailcow-migrate webmail --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json \
@@ -759,13 +759,14 @@ Preview checks existing contacts/preferences/folder state and editable filters, 
 user data or creating a completion receipt. Vacation/forwarding target checks run when editable-filter import is already complete;
 otherwise preview explicitly defers those checks until that prerequisite has been applied.
 
-Add `--apply` to import RoundCube preferences, contacts and folder state, then editable SOGo filters, then native vacation/forwarding
-settings, in that order. Every backend keeps its own conflict checks, pending receipts and native readback. Already completed
+Add `--apply` to import RoundCube preferences, contacts and folder state. PostfixAdmin then imports editable SOGo filters and native
+vacation/forwarding settings, in that order. Plesk keeps its copied personal Sieve and runs only the RoundCube stage.
+Every backend keeps its own conflict checks, pending receipts and native readback. Already completed
 stages retain subsequent user edits. Interrupted RoundCube/filter writes are inspected before resuming; uncertain native settings
 writes require reconciliation before another attempt. Source data remains unchanged, and approved deferrals remain visible.
 
-The private `roundcube/state.json` binds the batch, source/target, export, approved source/proposal fingerprints and all three
-backend receipts. Completion is recorded only after every stage completes and source, account, sender, isolation and prefilter
+The private `roundcube/state.json` binds the batch, source/target, export, approved source/proposal fingerprints and the source-specific
+backend receipts. Completion is recorded only after every required stage completes and source, account, sender, isolation and prefilter
 handoff checks pass. A completed rerun verifies saved receipt integrity and leaves live user data untouched.
 
 Webmail completion leaves isolation paused. After reviewing the results, use `target-isolation --action release --apply` with
@@ -811,8 +812,8 @@ scripts or unrelated preference drift block continuation. `filters_complete` is 
 Once complete, subsequent target user edits are retained. This receipt keeps `import_complete: false` and does not authorize release.
 
 The `webmail` command supplies the workspace lock, final transfer/activation checks, live isolation and unchanged-source checks,
-with explicit stopped-writer confirmation. Native vacation/forwarding settings use the next backend below. Plesk import remains
-blocked until its isolation/activation adapter is available; its scripts retain their separate copy/compile path.
+with explicit stopped-writer confirmation. Native vacation/forwarding settings use the next backend below. Plesk webmail import
+retains its separate personal-script copy/compile path and does not run this editable-filter stage.
 
 ### Native vacation and forwarding backend
 
@@ -947,7 +948,7 @@ The supported Plesk path requires Dovecot 2.4, full-address logins, Postfix 3 or
 username rewrites or service transport overrides. Shared settings and other batches remain preserved. Interrupted changes retain
 their pending operation and backups. After source isolation and inactive account staging, pause the target and use the same
 `mail`, `sieve`, `activate` and `quota` commands. Plesk Sieve is read from its verified JSON export and compiled natively; forwarding
-with an existing personal script remains blocked to preserve ordering. Plesk webmail import/handoff integration remains pending.
+with an existing personal script remains blocked to preserve ordering. Plesk webmail import follows activation and quota verification.
 
 After account staging, preview Mailcow isolation using the same saved plan and configuration:
 
@@ -997,9 +998,18 @@ webmail, session and writer checks apply. Once the repair journal exists, `--act
 import readiness checks select it automatically. An incomplete pause, interrupted release or released repair journal cannot
 fall back to the original journal to authorize further import work.
 
-With source isolation and all import prerequisites still verified, resume the PostfixAdmin `webmail` command. Completed native
+With source isolation and all import prerequisites still verified, resume the `webmail` command. Completed native
 stages retain subsequent user edits. After full webmail and quota completion, release restores the settings saved before this
-repair phase. Source controls remain separate; this target mode does not implement the pending Plesk import workflow.
+repair phase. Source controls remain separate for each adapter.
+
+If source RoundCube sessions need revocation after activation, use `roundcube-sessions --action revoke --apply --webmail-repair`
+with the original config/plan and fresh `--drafts-saved --writers-stopped` confirmations. Account activation and target isolation
+must verify, the import must be unfinished, and the approved source snapshot must remain unchanged. This step changes sessions
+only; it does not recopy mail or restart completed imports.
+
+Source recovery is limited to the pre-activation boundary. Activation intent, uncertain writes, missing account evidence after
+target isolation, or a forwarding/completion record block release. PostfixAdmin login release retains separate delivery holds;
+Plesk release restores its saved access/delivery controls. Neither action is a general rollback or copies target mail back.
 
 ## Package layout
 
