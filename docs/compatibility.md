@@ -64,6 +64,12 @@ Plesk Sieve is prepared for copying; its scripts are not restricted to the subse
 Mailcow's domain quota field mapping, mailbox attributes, native alias behavior and recovery-email support.
 Password reconciliation additionally requires Docker Compose and the running `php-fpm-mailcow` container with its application
 configuration, PDO database access, `hash_equals` and `verify_hash`. This read-only helper does not expose target password hashes.
+Planning and account staging require `doveadm pw -l` in the running Dovecot container and support for every scheme used by the
+batch. Applied staging, guarded activation and explicit `verify --passwords` also use the native helper for batch hash readback.
+Password data travels through standard input; only a boolean result is returned. No plaintext passwords are needed for hash comparison.
+These checks establish stored-hash preservation and scheme availability, not end-to-end IMAP/SMTP authentication.
+Recovery-email API readback and the saved expiration assessment remain mandatory. New plans and applied account continuations
+pin the policy fingerprint; altered decisions block reuse. Enabled dated/recurring expiration and phone/SMS recovery have no mapping.
 The account journal format supports resuming this application's staging operations, not arbitrary external migration journals.
 
 `target-isolation` requires completed account staging, root access on the Mailcow host, Docker Compose, readable host `/proc`

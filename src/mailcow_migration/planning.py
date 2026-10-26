@@ -130,6 +130,7 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
         provenance = {"version": 1, "kind": "migration-planning", "complete": False, "domain": domain,
                       "export": str(evidence.directory), "export_id": evidence.manifest["export_id"],
                       "source": asdict(evidence.source.connection), "configuration": configuration.document(),
+                      "policy_sha256": json_fingerprint(policy, canonical=True),
                       "started_at": datetime.now(timezone.utc).isoformat()}
         write_private_json(destination / "manifest.json", provenance)
         register_batch(destination, workspace)

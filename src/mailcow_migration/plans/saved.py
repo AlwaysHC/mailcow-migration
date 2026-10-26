@@ -5,6 +5,7 @@ from typing import Any, Mapping
 
 from .domain import active, valid_domain
 from .catalog import register_batch
+from .settings_policy import load_policy
 from ..configuration import Configuration
 from ..core.errors import MigrationError
 from ..core.storage import json_fingerprint, local_path, read_json
@@ -82,6 +83,10 @@ def load_saved_plan(file: Path, configuration: Configuration) -> SavedPlan:
         raise MigrationError("Expected an unchanged plan from a completed planning run")
     if manifest.get("configuration") != configuration.document():
         raise MigrationError("Configuration differs from the saved plan; retain the original batch configuration and state")
+    if "policy_sha256" in manifest and manifest["policy_sha256"] != json_fingerprint(
+        load_policy(str(path.parent / "policy.json")), canonical=True,
+    ):
+        raise MigrationError("Settings policy differs from the saved planning run; retain the original policy and batch")
     sources = tuple(source for source in configured_sources(configuration) if asdict(source) == manifest.get("source"))
     if len(sources) != 1 or plan["source"].get("kind", "postfixadmin") != sources[0].kind.value:
         raise MigrationError("Saved plan source differs from its manifest or configured connection")

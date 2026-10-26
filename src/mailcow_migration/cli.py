@@ -80,6 +80,9 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
+        if name == "verify":
+            command.add_argument("--passwords", action="store_true",
+                                 help="Explicitly compare stored mailbox hashes with the plan; later password changes will report a mismatch")
         if name == "prefilters":
             command.add_argument("--apply", action="store_true", help="Stage reviewed prefilters inactive and verify their stored values")
         if name == "senders":
@@ -151,7 +154,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             return run_plan(configuration, options.domain, options.export, options.out, options.quota_mib)
         elif options.command in ("accounts", "verify"):
             return run_accounts(configuration, options.plan,
-                                apply=options.command == "accounts" and options.apply, verify=options.command == "verify")
+                                apply=options.command == "accounts" and options.apply, verify=options.command == "verify",
+                                passwords=options.command == "verify" and options.passwords)
         elif options.command == "activate":
             return run_activation(configuration, options.plan, options.export, apply=options.apply,
                                   ready=options.ready, writers_stopped=options.writers_stopped)

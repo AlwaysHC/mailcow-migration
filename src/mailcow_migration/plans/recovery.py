@@ -4,6 +4,14 @@ from .assessment import check
 from .domain import address
 
 
+def password_expiration_check(policy: Mapping[str, Any]) -> Mapping[str, str]:
+    expiration = policy["sourcePasswordExpiration"]
+    return check("password-expiration", "not-needed" if expiration == "disabled" else "blocked",
+                 "Source password expiration is disabled under the existing policy" if expiration == "disabled" else
+                 "Mailcow has no native dated/recurring password expiration; force_pw_update is not equivalent" if expiration == "enabled" else
+                 "Confirm whether the source actually enforces password expiration; database dates do not establish this")
+
+
 def recovery_plan(plan: Mapping[str, Any]) -> Mapping[str, Any]:
     records = plan.get("source", {}).get("mailboxes")
     if not isinstance(records, list):

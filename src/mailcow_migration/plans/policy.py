@@ -1,55 +1,16 @@
-import ipaddress
 import re
-from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from .assessment import check
 from .domain import active
 from .evidence import ExportEvidence
 from .forwarding import mailbox_forwardings
 from .global_settings import shared_settings_assessment
-from .recovery import recovery_plan
+from .recovery import password_expiration_check, recovery_plan
+from .settings_policy import load_policy
 from .sieve_evidence import load_sieve_evidence
 from .webmail import webmail_assessment
-from ..core.errors import ConfigurationError, MigrationError
-from ..core.storage import read_json
-
-
-def load_policy(file: Optional[str]) -> Mapping[str, Any]:
-    policy = read_json(Path(file), private=True) if file else {}
-    allowed = {"adminNames", "allDomainAdmins", "mergeAdmins", "vacationZeroIntervalDays", "vacationDatesAreUtc",
-               "mailcowIp", "senderPermissions", "sourcePasswordExpiration", "vacationTimeZone"}
-    if not isinstance(policy, dict) or set(policy) - allowed:
-        raise ConfigurationError("Unknown settings policy field; use settings-policy.example.json")
-    for name, choices in (("allDomainAdmins", ("review", "batch-only")), ("sourcePasswordExpiration", ("disabled", "enabled", "review"))):
-        if name in policy and policy[name] not in choices:
-            raise ConfigurationError("{} must be {}".format(name, ", ".join(choices)))
-    names = policy.get("adminNames", {})
-    if not isinstance(names, dict) or any(not isinstance(value, str) or not value for value in names.values()):
-        raise ConfigurationError("adminNames must map source names to nonempty target names")
-    merges = policy.get("mergeAdmins", [])
-    if not isinstance(merges, list) or any(not isinstance(name, str) for name in merges):
-        raise ConfigurationError("mergeAdmins must contain explicitly reviewed target administrator names")
-    if "vacationDatesAreUtc" in policy and type(policy["vacationDatesAreUtc"]) is not bool:
-        raise ConfigurationError("vacationDatesAreUtc must be boolean")
-    interval = policy.get("vacationZeroIntervalDays")
-    if interval is not None and (type(interval) is not int or not 1 <= interval <= 30):
-        raise ConfigurationError("vacationZeroIntervalDays must be null or a reviewed integer from 1 to 30")
-    zone = policy.get("vacationTimeZone", "Europe/Rome")
-    if not isinstance(zone, str) or not zone:
-        raise ConfigurationError("vacationTimeZone must be a nonempty IANA timezone name")
-    if "mailcowIp" in policy:
-        try:
-            if not isinstance(policy["mailcowIp"], str):
-                raise ValueError("Expected IP address text")
-            ipaddress.ip_address(policy["mailcowIp"])
-        except ValueError as error:
-            raise ConfigurationError("mailcowIp must be a fixed IP address") from error
-    senders = policy.get("senderPermissions", {})
-    if (not isinstance(senders, dict) or any(not isinstance(items, list) or any(not isinstance(item, str) for item in items)
-                                           for items in senders.values())):
-        raise ConfigurationError("senderPermissions must map users to address lists")
-    return {"sourcePasswordExpiration": "disabled", "vacationTimeZone": "Europe/Rome", **policy}
+from ..core.errors import MigrationError
 
 
 def administrator_name(username: str, policy: Mapping[str, Any]) -> str:
@@ -114,11 +75,7 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
     checks.append(check("fetchmail", "blocked" if source["fetchmail"] else "not-needed",
                         "Fetchmail jobs, including disabled jobs, require a supported native mapping" if source["fetchmail"]
                         else "No fetchmail jobs to migrate"))
-    expiration = policy["sourcePasswordExpiration"]
-    checks.append(check("password-expiration", "not-needed" if expiration == "disabled" else "blocked",
-                        "Source password expiration is disabled under the existing policy" if expiration == "disabled" else
-                        "Mailcow has no native dated/recurring password expiration; force_pw_update is not equivalent" if expiration == "enabled" else
-                        "Confirm whether the source actually enforces password expiration; database dates do not establish this"))
+    checks.append(password_expiration_check(policy))
     permissions = sender_requests(plan, policy)
     webmail = webmail_assessment(plan, scripts, policy, evidence.source.connection.kind, forwardings)
     checks.extend(webmail["checks"])

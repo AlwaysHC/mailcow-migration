@@ -27,7 +27,7 @@ This snapshot has not been validated end to end.
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
 | `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
 | `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
-| `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
+| `verify` | Read back account/recovery inventories; optionally compare stored mailbox hashes with the plan using `--passwords`. |
 | `target-isolation` | Preview, pause, check and restore Mailcow access/delivery; support separately journaled webmail repair after activation. |
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
@@ -315,6 +315,22 @@ account operation. An existing primary domain is reused only when empty and free
 original settings saved before editing. Existing objects are never adopted as a previous batch merely because their names match.
 Conflict details are saved privately in `target-conflict.json`.
 
+Planning and account staging check that Dovecot advertises every password scheme needed by the batch. PostfixAdmin accepts
+complete MD5-CRYPT hashes; Plesk retains MD5-CRYPT, SHA256-CRYPT, SHA512-CRYPT and BLF-CRYPT, with available plaintext converted
+to salted SSHA256. Unsupported or malformed hashes and password payloads requesting a reset stop continuation.
+Applied staging compares all stored mailbox hashes with the plan in one native database readback before recording completion.
+Activation repeats this check under isolation. A mismatch stops the operation without rewriting passwords.
+
+Recovery email addresses retain their source spelling and are read back through the API. Invalid or self-referencing addresses,
+phone/SMS recovery and contacts without a target mailbox remain blockers. The saved password-expiration decision must match
+the planning assessment: only the reviewed disabled policy can continue. Enabled recurring/datetime expiration and unresolved
+review remain blocked; a forced password change is not used as a substitute.
+
+New planning manifests fingerprint the normalized saved policy. Account application also pins its fingerprint in the journal
+before writes and checks it on retries and during activation. Existing batches without a planning-policy fingerprint must still
+match their saved expiration assessment; their first applied continuation pins the policy. Keep the original policy with the
+batch. Changing the configuration's policy file does not replace the batch's saved decisions.
+
 `state.json` binds account operations to the plan fingerprint, API origin and local Mailcow directory. The shared operation lock
 covers preview, staging, reconciliation and verification. Each request is recorded before it is sent; successful operations receive
 receipts and are skipped on later runs. Changing the plan or target stops reuse of the journal. Retain the same batch directory
@@ -331,6 +347,11 @@ aliases, alias domains, BCC and recovery emails with the saved plan and recorded
 It does not test password login, messages, filters, sender permissions or delivery. Message copying and guarded activation are
 available separately; full source isolation and full migration recovery remain pending. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
+To explicitly compare stored mailbox hashes with the original plan, add `--passwords` to `verify`. It also checks required
+Dovecot schemes and performs no password writes. Subsequent user password changes intentionally report a mismatch with this
+option; ordinary verification and an already completed activation do not enforce the original hashes. Hash comparison is not
+an IMAP/SMTP login check, so controlled client authentication and delivery checks remain part of handoff.
 
 ## Account activation
 

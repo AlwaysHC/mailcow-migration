@@ -5,6 +5,7 @@ from typing import Any, Mapping
 
 from .account_inventory import account_conflicts, account_inventory
 from .mailcow import MailcowTarget
+from .passwords import check_password_support
 from ..core.errors import MigrationError
 from ..core.storage import read_text
 from ..plans.assessment import check
@@ -34,6 +35,9 @@ def target_assessment(
     host = inspect_target_host(target)
     assessment = account_conflicts(plan, account_inventory(target.api))
     checks = list(assessment["checks"])
+    schemes = check_password_support(plan, target)
+    checks.append(check("password-schemes", "supported" if schemes else "not-needed",
+                        "Target Dovecot supports " + ", ".join(schemes) if schemes else "No mailbox passwords to transfer"))
     if account_policy["admins"]:
         administrators = target.api.inventory("domain-admin")
         for row in account_policy["admins"]:

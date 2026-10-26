@@ -12,9 +12,10 @@ from .plans.domain import MIB
 from .plans.forwarding import mailbox_forwardings
 from .plans.recovery import recovery_plan
 from .plans.saved import SavedPlan, load_saved_plan
+from .plans.security import account_security_policy
 from .targets.account_inventory import DOMAIN_FIELDS, account_conflicts, account_inventory, domain_value, native_route_conflicts
 from .targets.mailcow import MailcowTarget
-from .targets.passwords import verify_target_password
+from .targets.passwords import check_password_support, verify_mailbox_passwords, verify_target_password
 from .targets.reconciliation import alias_destinations, api_number, api_string, reconcile_pending
 
 
@@ -192,9 +193,13 @@ def require_before_activation(state: Mapping[str, Any]) -> None:
         raise MigrationError("This operation is forbidden after target activation starts or during an uncertain target write")
 
 
-def run_accounts(configuration: Configuration, file: Path, *, apply: bool = False, verify: bool = False) -> int:
+def run_accounts(
+    configuration: Configuration, file: Path, *, apply: bool = False, verify: bool = False, passwords: bool = False,
+) -> int:
     if sys.platform != "linux" or os.geteuid() != 0:
         raise ConfigurationError("Run account staging on the Linux Mailcow host as root")
+    if passwords and not verify:
+        raise ConfigurationError("Use --passwords with verify")
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
         plan = batch.plan
@@ -204,10 +209,13 @@ def run_accounts(configuration: Configuration, file: Path, *, apply: bool = Fals
             raise MigrationError("Account mapping is blocked:\n" + "\n".join(blockers))
         journal = account_journal(batch, configuration)
         state = journal.read()
+        policy_fingerprint = account_security_policy(batch, state)
         if not verify and ("activationRequests" in state or state.get("activated") or "enable domain for activation" in state["done"]):
             raise MigrationError("Account staging is forbidden after activation starts")
         operations = account_mutations(plan, recovery["emails"], reuse_domain=bool(state.get("existingDomain")))
         target = MailcowTarget(configuration.mailcow)
+        if not verify:
+            check_password_support(plan, target)
         api = target.api
         inventory = account_inventory(api) if "activationRequests" in state else None
         activation = account_activation_mutations(plan, inventory) if inventory is not None else ()
@@ -223,6 +231,9 @@ def run_accounts(configuration: Configuration, file: Path, *, apply: bool = Fals
             if not state.get("accounts"):
                 raise MigrationError("Complete account staging for this plan before verification")
             verify_account_inventory(plan, inventory, recovery["emails"], state)
+            if passwords:
+                verify_mailbox_passwords(plan, target, batch.directory)
+                print("Stored mailbox hashes match the plan and Dovecot supports their schemes; no passwords were changed.")
             print("Domain, mailbox, alias, BCC and recovery inventories match the saved plan and recorded activation phase.")
             if activation and not state.get("activated"):
                 print("Activation remains incomplete; resume activate with the original plan and journals.")
@@ -258,14 +269,20 @@ def run_accounts(configuration: Configuration, file: Path, *, apply: bool = Fals
                 raise MigrationError(message)
             print(message)
         if apply:
+            state = {**journal.read(), "policy_sha256": policy_fingerprint}
             if existing is not None and not state.get("existingDomain"):
-                journal.save({**state, "existingDomain": existing})
+                state = {**state, "existingDomain": existing}
+            journal.save(state)
         for index, operation in enumerate(operations):
+            if account_security_policy(batch, journal.read()) != policy_fingerprint:
+                raise MigrationError("Settings policy changed during account staging; retain the original policy")
             outcome = journal.write_mutation(operation.identifier, operation.endpoint, operation.payload, api.request, apply=apply)
             print("{}/{}: {}: {}".format(index + 1, len(operations), outcome, operation.identifier))
             if apply and recovery["emails"] and operation.identifier == recovery["emails"][-1]["operation"]:
                 verify_recovery_emails(recovery["emails"], api.inventory("mailbox"))
         if apply:
+            verify_mailbox_passwords(plan, target, batch.directory)
+            account_security_policy(batch, journal.read())
             journal.save({**journal.read(), "accounts": True})
             print("Accounts staged inactive. Keep the plan and journal together; copying, isolation and activation remain separate steps.")
         else:

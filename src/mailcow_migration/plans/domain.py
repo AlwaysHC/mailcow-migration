@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
+from .passwords import password_scheme
 from ..configuration import MigrationConfiguration
 from ..core.domain import domain_name
 from ..core.errors import ConfigurationError, MigrationError
@@ -80,8 +81,7 @@ def postfixadmin_password(row: Mapping[str, Any]) -> str:
     if not isinstance(password, str):
         raise MigrationError("Missing source password for {}".format(row["username"]))
     password = "{MD5-CRYPT}" + password if password.startswith("$1$") else password
-    if not password.startswith("{MD5-CRYPT}$1$"):
-        raise MigrationError("Unsupported password scheme for {}".format(row["username"]))
+    password_scheme(password, row["username"], ("MD5-CRYPT",))
     return password
 
 

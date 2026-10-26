@@ -6,6 +6,7 @@ import secrets
 from typing import Any, Mapping
 
 from .domain import MIB, SAFE_INTEGER, TABLES, build_plan, require_acyclic, valid_domain
+from .passwords import CRYPT_SCHEMES
 from ..configuration import MigrationConfiguration
 from ..core.errors import MigrationError
 
@@ -24,13 +25,7 @@ def plesk_password(row: Mapping[str, Any]) -> str:
         digest = hashlib.sha256(value.encode("utf-8") + salt).digest()
         return "{SSHA256}" + base64.b64encode(digest + salt).decode("ascii")
     password = re.sub(r"^\{(?:CRYPT|MD5-CRYPT|SHA256-CRYPT|SHA512-CRYPT|BLF-CRYPT)\}", "", value)
-    schemes = (
-        (r"\$1\$[^$]{1,8}\$[./a-zA-Z0-9]{22}", "MD5-CRYPT"),
-        (r"\$5\$(?:rounds=[0-9]+\$)?[^$]{1,16}\$[./a-zA-Z0-9]{43}", "SHA256-CRYPT"),
-        (r"\$6\$(?:rounds=[0-9]+\$)?[^$]{1,16}\$[./a-zA-Z0-9]{86}", "SHA512-CRYPT"),
-        (r"\$2[aby]\$[0-9][0-9]\$[./a-zA-Z0-9]{53}", "BLF-CRYPT"),
-    )
-    scheme = next((name for pattern, name in schemes if re.fullmatch(pattern, password)), None)
+    scheme = next((name for pattern, name in CRYPT_SCHEMES if re.fullmatch(pattern, password)), None)
     if scheme is None:
         raise MigrationError("Unsupported or truncated password hash: " + row["username"])
     return "{" + scheme + "}" + password

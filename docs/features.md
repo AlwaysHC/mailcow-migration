@@ -81,10 +81,12 @@ Configuration generation is available in the current development version.
   Require explicit readiness/stopped-writer confirmation, pin ordered target requests, read back each edit and reconcile uncertain
   outcomes without repeating writes. Preserve planned inactive accounts and restore the planned domain state. Verify partial
   activation against receipts while retaining source/target isolation; webmail completion and release remain separate.
-- [ ] **Preserve:** Transfer accepted mailbox password hashes without requiring user resets. The PostfixAdmin baseline accepts
+- [x] **Preserve:** Transfer accepted mailbox password hashes without requiring user resets. The PostfixAdmin baseline accepts
   MD5-CRYPT only. Plesk accepts MD5-CRYPT, SHA256-CRYPT, SHA512-CRYPT, and BLF-CRYPT; available plaintext is converted to SSHA256.
   Verify target scheme support and block malformed, truncated, or unmapped credentials.
-  Account staging submits the planned hashes and reconciliation verifies uncertain password writes; comprehensive login checks remain pending.
+  Share format validation across planning and staging, check live Dovecot scheme availability and read back stored hashes before
+  staging completion and guarded activation. Explicit `verify --passwords` compares the original hashes; routine verification
+  preserves later password changes. Native reconciliation remains available; IMAP/SMTP login checks belong to operator handoff.
 - [ ] **Configure:** Preserve mailbox forwarding destinations and keep-copy behavior. Account for personal-filter ordering;
   the current Plesk path blocks forwarding combined with personal Sieve until an ordering adapter exists.
 - [x] Inspect the target mail volume and vmail identity, validate mailbox paths, and probe sender/receiver transfer capabilities separately.
@@ -101,8 +103,11 @@ Configuration generation is available in the current development version.
 - [x] Recalculate quota for planned active mailboxes after activation on the original copied mail volume.
   Preserve disabled-user/domain behavior, native diagnostics and command completion; journal pending users and repeat interrupted
   recalculations under fresh isolation checks. Bind completion to transfer evidence and require it before webmail import or target release.
-- [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
+- [x] **Configure:** Import valid recovery email addresses and map password-expiration policy.
   Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
+  Preserve recovery-email API readback and enforce the reviewed disabled-expiration decision during staging and activation.
+  Pin the saved policy in new planning manifests and before account writes; changed decisions block resumption.
+  Dated/recurring expiration remains blocked rather than being replaced with forced password updates.
 - [x] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
   Review global administrators separately; Plesk panel users are outside this mail-domain migration.
   Preview the saved proposal, require explicit rename/merge ownership decisions, preserve existing memberships/security,
