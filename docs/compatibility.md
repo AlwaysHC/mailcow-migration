@@ -15,6 +15,7 @@ The native SOGo import backend is implemented internally, with no import command
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
+Explicit sender-permission staging and read-only verification are also available.
 Integrated webmail imports, full source isolation, native SOGo filter/settings integration, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -130,6 +131,12 @@ per-host configuration, or external address books require explicit handling befo
 
 The target must provide an HTTPS Mailcow API, a usable API key with the required read/write access, local configuration
 and mail-volume access, and Docker Compose v2. Verify `MAILDIR_SUB=Maildir`, vmail ownership, and the actual Docker mounts.
+
+`senders` requires mailbox/alias inventories exposing `sender_acl`, alias `sender_allowed`/destinations, and mailbox activity.
+Applying a merge requires `edit/mailbox` and an observable security-attributes dictionary; current `force_tfa` and
+`force_pw_update` values are included in the edit and read back. Target ACL entries must be strings. Sender mappings come
+only from the saved policy/account proposal. Preview/apply require staged inactive accounts; `--check` performs no writes
+and can verify completed permission staging after activation. This does not certify SMTP service restriction behavior.
 
 `prefilters` requires `get/filters/all` and, when applying, `add/filter`, plus the account inventories used for staging checks.
 Filter rows must expose their username, type, description, exact script, activity and a usable ID. The command creates only

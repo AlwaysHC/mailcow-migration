@@ -10,6 +10,7 @@ An explicit user-preparation action can refresh missing SOGo user sources and re
 Append-only mail copying is available for staged PostfixAdmin batches with isolation checks and explicit stopped-writer confirmation.
 Guarded personal/default Sieve installation and compilation are available separately.
 Reviewed forwarding/vacation prefilters can be staged inactive with API readback and uncertain-request reconciliation.
+Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
 Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -30,6 +31,7 @@ This snapshot has not been validated end to end.
 | `mail` | Preview or append Maildir files under isolation, preserving existing files and recording applied/final passes. |
 | `sieve` | Preview or install exported personal/default filters, with explicit conflict replacement, backups and target compilation. |
 | `prefilters` | Preview or stage inactive forwarding/vacation prefilters from the reviewed webmail plan. |
+| `senders` | Preview, merge or verify reviewed sender permissions, retaining existing grants and mailbox security settings. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -276,6 +278,35 @@ aliases, alias domains, BCC and recovery emails with the saved plan. It does not
 sender permissions or delivery. Message copying is available separately; full source isolation, activation and full migration recovery remain pending;
 these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
+## Sender permissions
+
+After account staging, preview the explicit `senderPermissions` mappings from the saved policy:
+
+```bash
+mailcow-migrate senders --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+The policy must still match the saved account proposal. Each mapping names a real batch mailbox and explicit batch mailbox
+or alias addresses; new wildcard/domain-wide grants are not accepted or inferred from source aliases. Existing target ACLs
+are retained, including any broader grants already present.
+
+Coverage recognizes the mailbox's own address, existing exact/global/domain ACL entries, and target aliases whose
+`sender_allowed` flag and destinations permit that mailbox. Already covered requests need no mailbox edit.
+
+Add `--apply` to merge missing explicit addresses. All selected mailboxes must remain staged inactive, with completed
+account receipts and no activation or uncertain account write. The command checks the entire selection first, saves original
+grants in a private `senders.json` journal, and records API intent before editing. Edits carry forward `force_tfa` and
+`force_pw_update`; unrecognized security values or changes after inspection stop the edit.
+
+Readback verifies requested coverage, retained grants and security values for each edit. An uncertain API outcome is reconciled
+against the exact saved request before any further write; preview can update those local receipts without changing mailboxes.
+Missing preserved grants or drift after a completed permission edit block continuation rather than reapplying it.
+
+`--check` is read-only and requires completed sender staging when mappings are configured. It can run after account activation
+and rechecks requested coverage and preserved grants. It does not freeze later password/MFA choices. This verifies API permission
+data; SMTP authentication/enforcement and client delivery tests remain separate. Sender staging neither activates mailboxes
+nor changes Postfix service restrictions.
 
 ## Forwarding/vacation prefilter staging
 
@@ -694,6 +725,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |
 | `sieve`, `targets.sieve` | Exported filter selection, conflict backups, guarded installation/removal and native compilation. |
 | `prefilters` | Inactive forwarding/vacation filter staging, target conflict checks and API request reconciliation. |
+| `senders`, `targets.senders` | Explicit sender ACL merges, security-attribute preservation and live permission verification. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

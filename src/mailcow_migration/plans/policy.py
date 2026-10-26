@@ -58,6 +58,17 @@ def administrator_name(username: str, policy: Mapping[str, Any]) -> str:
     return username.replace("@", ".").lower() if re.fullmatch(r"[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+", username) else username
 
 
+def sender_requests(plan: Mapping[str, Any], policy: Mapping[str, Any]) -> list:
+    users = {row["username"] for row in plan["mailboxes"]}
+    addresses = users | {row["address"] for row in plan["aliases"] if not row["address"].startswith("@")}
+    permissions = []
+    for username, senders in policy.get("senderPermissions", {}).items():
+        if username not in users or any(sender not in addresses for sender in senders):
+            raise MigrationError("Sender permissions must name real batch users and explicit batch mailbox/alias addresses; no wildcards")
+        permissions.append({"username": username, "senders": sorted(set(senders))})
+    return permissions
+
+
 def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mapping[str, Any]) -> Mapping[str, Any]:
     forwarding = mailbox_forwardings(plan)
     recovery = recovery_plan(plan)
@@ -101,13 +112,7 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
                         "Source password expiration is disabled under the existing policy" if expiration == "disabled" else
                         "Mailcow has no native dated/recurring password expiration; force_pw_update is not equivalent" if expiration == "enabled" else
                         "Confirm whether the source actually enforces password expiration; database dates do not establish this"))
-    users = {row["username"] for row in plan["mailboxes"]}
-    addresses = users | {row["address"] for row in plan["aliases"] if not row["address"].startswith("@")}
-    permissions = []
-    for username, senders in policy.get("senderPermissions", {}).items():
-        if username not in users or any(sender not in addresses for sender in senders):
-            raise MigrationError("Sender permissions must name real batch users and explicit batch mailbox/alias addresses; no wildcards")
-        permissions.append({"username": username, "senders": sorted(set(senders))})
+    permissions = sender_requests(plan, policy)
     webmail = webmail_assessment(plan, scripts, policy, evidence.source.connection.kind, forwardings)
     checks.extend(webmail["checks"])
     shared_settings = shared_settings_assessment(plan, evidence, policy)

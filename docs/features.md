@@ -94,6 +94,10 @@ Configuration generation is available in the current development version.
 - [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
   Review global administrators separately; Plesk panel users are outside this mail-domain migration.
 - [ ] **Configure:** Preserve supported send-as grants and BCC rules without widening existing target permissions or scope.
+- [x] Apply explicit sender-permission mappings to staged inactive mailboxes and verify them through the target API.
+  Recognize existing direct/wildcard/alias coverage, retain old ACL entries and password-change/two-factor requirements,
+  and journal uncertain edits for reconciliation without blindly resending them. Read-only checks remain available after activation.
+  New grants require explicit batch addresses; SMTP enforcement and complete sender-policy verification remain separate.
 
 ## Filters and webmail
 
@@ -192,6 +196,7 @@ Configuration generation is available in the current development version.
   Mail copying retains pending/final-pass receipts and resumes through fresh checks and append-only copying.
   Sieve installation shares transfer identity/isolation checks and retains pending stages, export fingerprints and conflict backups.
   Inactive prefilter staging retains source/policy identity and reconciles uncertain API outcomes against live target data.
+  Sender-permission staging preserves baseline ACLs and security attributes, with request reconciliation and live readback.
   Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.

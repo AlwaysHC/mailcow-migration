@@ -15,6 +15,7 @@ from .mail import run_mail
 from .planning import run_plan
 from .prefilters import run_prefilters
 from .roundcube_sessions import run_roundcube_sessions
+from .senders import run_senders
 from .sogo_target import run_sogo_target
 from .sieve import run_sieve
 from .source_delivery import run_source_delivery
@@ -46,6 +47,7 @@ def parser() -> argparse.ArgumentParser:
         ("mail", "Preview or append source Maildirs under verified isolation; preserve existing target files"),
         ("sieve", "Preview or install exported personal/default Sieve with explicit replacement, backups and compilation"),
         ("prefilters", "Preview or stage inactive forwarding/vacation prefilters from the saved webmail plan"),
+        ("senders", "Preview, merge or verify explicitly reviewed sender permissions while preserving existing grants"),
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE", help="JSON configuration file")
@@ -59,12 +61,17 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
         if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery",
-                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters"):
+                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
         if name == "prefilters":
             command.add_argument("--apply", action="store_true", help="Stage reviewed prefilters inactive and verify their stored values")
+        if name == "senders":
+            action = command.add_mutually_exclusive_group()
+            action.add_argument("--apply", action="store_true", help="Merge explicit grants into staged inactive mailboxes")
+            action.add_argument("--check", action="store_true",
+                                help="Read-only verification of completed sender permissions, including after activation")
         if name in ("mail", "sieve"):
             command.add_argument("--apply", action="store_true", help="Apply the selected transfer and journal its result")
             command.add_argument("--writers-stopped", action="store_true",
@@ -138,6 +145,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
                              use_default=options.use_default_sieve, replace=options.replace_sieve, writers_stopped=options.writers_stopped)
         elif options.command == "prefilters":
             return run_prefilters(load_configuration(options.config), options.plan, options.export, apply=options.apply)
+        elif options.command == "senders":
+            return run_senders(load_configuration(options.config), options.plan, apply=options.apply, check=options.check)
         else:
             load_configuration(options.config)
             print("Configuration is valid. Credential files and server connectivity have not been checked.")
