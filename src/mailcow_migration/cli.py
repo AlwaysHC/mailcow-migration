@@ -11,6 +11,7 @@ from .core.errors import MigrationError
 from .exporting import run_export
 from .inspection import run_inspection
 from .isolation import run_target_isolation
+from .mail import run_mail
 from .planning import run_plan
 from .roundcube_sessions import run_roundcube_sessions
 from .sogo_target import run_sogo_target
@@ -23,7 +24,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="mailcow-migrate", description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
         epilog="Preparation, account staging, target isolation and PostfixAdmin login and delivery controls are available. "
-               "Full source isolation, mail transfer and activation remain pending.",
+               "Append-only mail transfer requires staged accounts and stopped writers. Full isolation and activation remain pending.",
     )
     result.add_argument("--version", action="version", version="%(prog)s " + __version__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -40,6 +41,7 @@ def parser() -> argparse.ArgumentParser:
         ("source-delivery", "Preview, pause or check PostfixAdmin delivery, recipient routing and RoundCube sessions"),
         ("roundcube-sessions", "Preview RoundCube user data and batch sessions; revoke or check sessions under verified source isolation"),
         ("sogo-target", "Preview or configure required SOGo settings and inspect existing user-data conflicts"),
+        ("mail", "Preview or append source Maildirs under verified isolation; preserve existing target files"),
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE", help="JSON configuration file")
@@ -51,10 +53,15 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
-        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "roundcube-sessions", "sogo-target"):
+        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "roundcube-sessions", "sogo-target", "mail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
+        if name == "mail":
+            command.add_argument("--apply", action="store_true", help="Append missing Maildir files and journal the result")
+            command.add_argument("--final", action="store_true", help="Record a final mail pass only after an applied copy and live checks succeed")
+            command.add_argument("--writers-stopped", action="store_true",
+                                 help="Confirm batch writers, submission and account administration are stopped on both servers")
         if name == "target-isolation":
             command.add_argument("--action", choices=("preview", "pause", "check", "release"), default="preview",
                                  help="Defaults to read-only preview")
@@ -109,6 +116,9 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
                                           reviewed=options.reviewed, accept_deferrals=options.accept_deferrals)
         elif options.command == "sogo-target":
             return run_sogo_target(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
+        elif options.command == "mail":
+            return run_mail(load_configuration(options.config), options.plan, apply=options.apply,
+                            final=options.final, writers_stopped=options.writers_stopped)
         else:
             load_configuration(options.config)
             print("Configuration is valid. Credential files and server connectivity have not been checked.")

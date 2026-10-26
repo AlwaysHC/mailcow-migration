@@ -116,7 +116,7 @@ def account_journal(batch: SavedPlan, configuration: Configuration) -> Operation
 
 def require_before_activation(state: Mapping[str, Any]) -> None:
     if state.get("pending") or state.get("activated") or "enable domain for activation" in state["done"]:
-        raise MigrationError("Source changes are forbidden after target activation starts or during an uncertain target write")
+        raise MigrationError("This operation is forbidden after target activation starts or during an uncertain target write")
 
 
 def run_accounts(configuration: Configuration, file: Path, *, apply: bool = False, verify: bool = False) -> int:

@@ -12,7 +12,8 @@ RoundCube snapshots, SOGo proposals and session previews support either source; 
 SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 The native SOGo import backend is implemented internally, with no import command yet.
-Message transfer, integrated webmail imports, full source isolation, activation and full recovery remain planned work.
+Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
+Integrated webmail imports, full source isolation, Sieve installation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
@@ -171,6 +172,15 @@ prove that a deployed image contains a feature. Other target services are prereq
 
 These command dependencies cover the available commands and planned migration workflows.
 Compatibility checks must verify options and behavior, not just executable presence.
+
+The `mail` command runs as root on the Linux Mailcow host and requires completed account staging, source login/delivery/session
+isolation and target access/delivery isolation. Plesk copying is blocked until its isolation adapter is implemented.
+It requires GNU `install` for owned directories, `MAILDIR_SUB=Maildir`, local mail-volume access and rsync support for archive/
+hard-link preservation, safe links, checksums, itemized dry runs, ownership mapping, `--ignore-existing`, statistics and progress.
+Both rsync endpoints are probed. SSH retains strict host-key checking and the configured connection file.
+Progress is streamed to the terminal; inspection/count diagnostics are private. Interrupted copies retain their transfer journal.
+The required `--writers-stopped` confirmation covers submission, hidden custom writers and account administration that automatic
+checks cannot fully establish. A final mail pass does not certify Sieve, quota recalculation, webmail import or full cutover.
 
 | Location | Commands or facilities |
 | --- | --- |

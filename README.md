@@ -7,7 +7,8 @@ Target isolation and PostfixAdmin login and delivery controls are available as s
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
 SOGo target preparation can check/configure custom identity support, inspect existing user-data conflicts and assess target folder display state.
 An explicit user-preparation action can refresh missing SOGo user sources and reconcile cached unknown-user lookups.
-Full source isolation, message transfer, activation and full cutover remain pending.
+Append-only mail copying is available for staged PostfixAdmin batches with isolation checks and explicit stopped-writer confirmation.
+Full source isolation, Sieve installation, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -24,6 +25,7 @@ This snapshot has not been validated end to end.
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
 | `sogo-target` | Prepare identity settings/user lookups, check effective settings, and inspect native data/folder-state conflicts. |
+| `mail` | Preview or append Maildir files under isolation, preserving existing files and recording applied/final passes. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -227,7 +229,7 @@ records `target_verified: false` and `selection_recorded: false`: selection/excl
 privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-Full RoundCube target assessment/import, transfer execution, full source isolation, DNS handoff and full migration resume remain pending.
+Mail execution is a separate guarded command. Integrated RoundCube import, full source isolation, DNS handoff and full migration resume remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -267,9 +269,46 @@ leaving target accounts unchanged. Password-check diagnostics, when present, are
 
 `verify` requires completed staging receipts and compares domain limits, account activity, mailbox quotas/names/quarantine,
 aliases, alias domains, BCC and recovery emails with the saved plan. It does not test password login, messages, filters,
-sender permissions or delivery. Full source isolation, message copying, activation and full migration recovery remain pending;
+sender permissions or delivery. Message copying is available separately; full source isolation, activation and full migration recovery remain pending;
 these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
+## Mail copying
+
+After staging accounts, pausing target access/delivery, freezing source logins and pausing source delivery with RoundCube sessions
+revoked, preview a PostfixAdmin batch:
+
+```bash
+mailcow-migrate mail --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --writers-stopped
+```
+
+`--writers-stopped` is required for preview and apply. Supply it only after stopping batch writes, submission and account
+administration on both servers. The command rechecks the existing login, delivery, queue, session and detected-writer controls;
+custom writers hidden behind scripts and complete submission isolation still require operator action. Resolve saved blocking
+findings first. Plesk copying remains unavailable until its isolation adapter is implemented.
+
+The command requires matching completed account receipts, inactive target accounts and a completed target pause, with no
+uncertain account request or activation started. It verifies the account inventory and source domain/mailbox inventory,
+resolves the current mail volume and vmail ownership, and probes sender/receiver rsync capabilities. Source host/root must
+match quota measurement and any previous transfer. All source Maildirs are checked before the first copy.
+
+Add `--apply` to copy missing files. Mailboxes with existing target data first pass a checksum dry run; content/type conflicts,
+target symlinks and message IDs found under another target path stop continuation. Copying uses
+`--ignore-existing`, preserves hard links and safe-link handling, and excludes Dovecot indexes, `maildirsize` and temporary
+message files. Required target directories are created with vmail ownership. A read-only count precedes each rsync pass;
+entry names, metadata, totals and transfer progress are displayed, with command errors stopping the operation.
+
+Every applied attempt records `mailPending: true` and clears `finalMail` before live preflight. The private `transfers.json`
+pins the plan, configured source/target, mail volume and ownership. An interrupted pass keeps its journal and already copied
+mail; rerun the same command to repeat live checks and append only missing files. Preview writes private diagnostics only,
+leaving target mail and transfer receipts unchanged. If the mailbox parent is absent, preview reports the required directory
+creation without attempting a copy into a nonexistent parent.
+
+Use `--apply --final` for the final mail pass. Only successful copying followed by live isolation, source inventory and target
+storage checks records `mailPending: false` and `finalMail: true`. An ordinary applied pass records `finalMail: false`.
+No Sieve completion is inferred from mail copying. Disk capacity, fixed-quota suitability, complete account-setting drift
+verification, Sieve installation, quota recalculation, activation and cutover remain separate requirements. Keep both servers
+isolated after copying; a final mail receipt does not authorize access restoration or mark the migration complete.
 
 ## RoundCube snapshots and sessions
 
@@ -529,8 +568,9 @@ changing services or queue scheduling.
 This snapshot provides no delivery-release command. Holds remain until guarded handoff is implemented and completed; releasing
 source logins alone does not remove them. The delivery journal explicitly records `source_isolated: false` and
 `webmail_sessions_verified: false`; session verification is recorded separately in the RoundCube session journal.
-Webmail import, complete submission checks and combined source readiness remain pending, so this command does not authorize
-copying, activation or cutover. Plesk retains its separate pending adapter.
+Webmail import, complete submission checks and combined source readiness remain pending. Delivery receipts alone do not authorize
+copying, activation or cutover; the mail command additionally checks target isolation and requires stopped-writer confirmation.
+Plesk retains its separate pending adapter.
 
 ## Target isolation
 
@@ -582,6 +622,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
 | `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
 | `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
+| `mail`, `core.rsync` | Guarded Maildir append/preview, native rsync progress and transfer receipts. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

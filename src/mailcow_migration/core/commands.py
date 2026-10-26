@@ -34,14 +34,17 @@ def run_command(
     secrets: Sequence[str] = (), allowed_codes: Sequence[int] = (0,),
     diagnostic_file: Optional[Path] = None,
     stdout_file: Optional[Path] = None, environment: Optional[Mapping[str, str]] = None,
+    inherit_output: bool = False,
 ) -> CommandResult:
     if not arguments or isinstance(arguments, (str, bytes)) or timeout <= 0:
         raise MigrationError("A command argument sequence and positive timeout are required")
+    if inherit_output and (stdout_file is not None or diagnostic_file is not None):
+        raise MigrationError("Inherited command output cannot also use private output files")
     name = label or Path(arguments[0]).name
     LOGGER.debug("Running %s", name)
     try:
         with ExitStack() as stack:
-            output: Union[int, BinaryIO] = subprocess.PIPE
+            output: Optional[Union[int, BinaryIO]] = None if inherit_output else subprocess.PIPE
             if stdout_file is not None:
                 if os.name != "posix":
                     raise MigrationError("Private command output files require a POSIX host")
@@ -51,7 +54,7 @@ def run_command(
                 output = stack.enter_context(os.fdopen(descriptor, "wb"))
             process = subprocess.run(
                 tuple(arguments), input=input_text, stdin=subprocess.DEVNULL if input_text is None else None,
-                stdout=output, stderr=subprocess.PIPE, cwd=cwd, timeout=timeout,
+                stdout=output, stderr=None if inherit_output else subprocess.PIPE, cwd=cwd, timeout=timeout,
                 env={**os.environ, **environment} if environment is not None else None,
                 encoding="utf-8", check=False,
             )
@@ -61,7 +64,7 @@ def run_command(
         raise MigrationError("Cannot run {}: {}".format(name, error.strerror)) from error
     except UnicodeError as error:
         raise MigrationError("{} returned invalid UTF-8 output; contents omitted".format(name)) from error
-    result = CommandResult(process.returncode, process.stdout if stdout_file is None else "", process.stderr)
+    result = CommandResult(process.returncode, process.stdout or "", process.stderr or "")
     if result.stderr:
         if diagnostic_file is not None:
             write_private_text(diagnostic_file, result.stderr)

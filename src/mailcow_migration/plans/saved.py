@@ -3,11 +3,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from .domain import valid_domain
+from .domain import active, valid_domain
 from ..configuration import Configuration
 from ..core.errors import MigrationError
 from ..core.storage import json_fingerprint, local_path, read_json
 from ..sources import SourceConnection, configured_sources
+from ..sources.inventory import DomainInventory
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,14 @@ class SavedPlan:
     def blocking_findings(self) -> str:
         return "\n".join("{}: {}".format(row["id"], row["detail"]) for row in self.assessment["checks"]
                          if row["status"] in ("blocked", "decision"))
+
+
+def validate_plan_inventory(plan: Mapping[str, Any], inventory: DomainInventory) -> None:
+    mailboxes = sorted(row["payload"]["local_part"] for row in plan["mailboxes"] if row["payload"]["domain"] == plan["domain"])
+    aliases = sorted(row["alias_domain"] for row in plan["aliasDomains"] if row["target_domain"] == plan["domain"] and active(row["active"]))
+    if (not inventory.present or inventory.primary != plan["domain"] or tuple(mailboxes) != inventory.mailboxes
+            or tuple(aliases) != inventory.aliases or bool(plan["domainActive"]) != inventory.active):
+        raise MigrationError("Source domain/mailbox inventory differs from the plan; retain the batch and reconcile before continuing")
 
 
 def validate_saved_plan(plan: Any) -> None:

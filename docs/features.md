@@ -62,7 +62,7 @@ Configuration generation is available in the current development version.
   source/target identity, and operator decisions. Preview must not modify either mail service.
   Account, source webmail, shared source settings and sender-policy assessments are implemented.
   Mail storage, rsync capabilities and read-only append previews are implemented.
-  Target webmail verification, shared-setting application, transfer execution and cutover/resume remain pending.
+  Guarded PostfixAdmin mail execution is available separately. Integrated webmail verification, shared-setting application and cutover/resume remain pending.
 
 ## Accounts and messages
 
@@ -85,6 +85,10 @@ Configuration generation is available in the current development version.
 - [ ] **Preserve:** Copy Maildir messages and supported metadata with append-only rsync, preserving existing target files.
   Conflicting content, unsafe links, source changes, and unaccounted writers must stop copying or activation.
   Include final verification and target quota recalculation.
+- [x] Provide guarded PostfixAdmin mail preview/apply with explicit stopped-writer confirmation and live isolation/inventory checks.
+  Check all source Maildirs before copying, reuse checksum conflict checks, preserve existing files and show rsync counts/progress.
+  Bind private transfer receipts to source/target identity, clear prior final-pass eligibility before each applied attempt,
+  and record a final pass only after copying and renewed checks. Sieve, quota recalculation and activation remain pending.
 - [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
   Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
 - [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
@@ -177,7 +181,8 @@ Configuration generation is available in the current development version.
   Account staging resumes its own receipts and pending requests; target isolation retains resumable pause/release state.
   PostfixAdmin login controls retain a resumable operation journal and support release before activation.
   Source delivery retains operation stages, source configuration backups and recipient-isolation evidence; delivery release remains pending.
-  Mail, full source isolation, activation and other workflow journals remain pending.
+  Mail copying retains pending/final-pass receipts and resumes through fresh checks and append-only copying.
+  Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.

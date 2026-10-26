@@ -16,6 +16,7 @@ from .plans.domain import MIB, QUOTA_LIMIT, active, build_plan, number
 from .plans.evidence import ExportEvidence, load_export
 from .plans.plesk import plesk_plan
 from .plans.policy import load_policy, policy_plan
+from .plans.saved import validate_plan_inventory
 from .plans.transfer import transfer_assessment
 from .sources import SourceKind
 from .sources.inventory import inspect_source
@@ -43,14 +44,6 @@ def source_plan(configuration: Configuration, evidence: ExportEvidence, fixed_qu
         return {**plan, "source": {**plan["source"], "vacationDatesUtc": parsed["vacationDatesUtc"]}}
     except (KeyError, TypeError, ValueError, OverflowError) as error:
         raise MigrationError("Source export has invalid or missing planning fields; contents omitted") from error
-
-
-def validate_plan_inventory(plan: Mapping[str, Any], evidence: ExportEvidence) -> None:
-    inventory = evidence.source.inventory
-    mailboxes = sorted(row["payload"]["local_part"] for row in plan["mailboxes"] if row["payload"]["domain"] == plan["domain"])
-    aliases = sorted(row["alias_domain"] for row in plan["aliasDomains"] if row["target_domain"] == plan["domain"] and active(row["active"]))
-    if tuple(mailboxes) != inventory.mailboxes or tuple(aliases) != inventory.aliases or bool(plan["domainActive"]) != inventory.active:
-        raise MigrationError("Exported account plan differs from its inspected domain inventory; export the current source again")
 
 
 def planning_summary(
@@ -128,7 +121,7 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
         evidence = load_export(configuration, domain, export_directory)
         policy = load_policy(configuration.migration.policy_file)
         plan = source_plan(configuration, evidence, fixed_quota)
-        validate_plan_inventory(plan, evidence)
+        validate_plan_inventory(plan, evidence.source.inventory)
         account_policy = policy_plan(plan, evidence, policy)
         private_directory(destination.parent)
         destination.mkdir(mode=0o700)
