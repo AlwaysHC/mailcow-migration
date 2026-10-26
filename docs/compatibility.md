@@ -12,6 +12,7 @@ RoundCube snapshots, SOGo proposals and session previews support either source; 
 SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 The native SOGo import backend is implemented internally, with no import command yet.
+The editable-filter backend also implements native preference and stored/active script readback, pending workflow integration.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
@@ -201,6 +202,13 @@ volume, and effective Dovecot `plugin/sieve` equal to `/var/vmail/sieve/%u.sieve
 `sievec` as the container's `vmail` user. Exported scripts must pass the supported PostfixAdmin syntax/mapping checks; compiled
 files must remain regular files. Preview never invokes the compiler or changes target scripts. Applied compilation failures
 retain pending state and recovery backups; shared defaults, native SOGo preferences and account activation are separate.
+
+The internal editable SOGo filter backend requires the same active Sieve path, plus `doveadm sieve list/put/activate` and
+`doveadm -f json sieve get` returning one record with a string `sieve script` field. SOGo must expose configured user sources,
+editable-filter support and the enabled capabilities needed by the converted rules. Its native backups must contain two
+preference dictionaries. `sogo-tool restore -p` must accept XML property lists and retain unrelated defaults/settings.
+The backend verifies both stored and active script contents and preserves private pending receipts on failure. It has no CLI
+entry point yet; a caller must enforce completed transfer, activation and isolation prerequisites with stopped writers.
 
 | Location | Commands or facilities |
 | --- | --- |

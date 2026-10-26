@@ -111,7 +111,12 @@ Configuration generation is available in the current development version.
   Save personal/default scripts, converted rules, blockers, native preferences and staging prefilters in a private webmail plan.
   Keep Plesk personal Sieve and forwarding scripts on their copy/compile path without imposing editable-filter conversion.
 - [ ] **Preserve:** Import and verify editable SOGo filters against target preferences and active scripts.
-  Target compilation, capability/conflict checks and readback remain required before applying the saved proposals.
+  The internal backend implements capability/conflict checks, native preference restoration and stored/active script readback.
+  Command integration and enforcing transfer/activation/isolation prerequisites remain pending.
+- [x] Implement the native PostfixAdmin editable-filter import backend with private backups and per-user pending receipts.
+  Require matching active/stored scripts, preserve unrelated defaults/settings, block enabled native vacation/forward/notification
+  conflicts, and verify converted preferences before activating the stored script. Reconcile interrupted work through fresh reads;
+  retain later user edits after completion. Full webmail completion and native vacation/forwarding handoff remain separate.
 - [ ] **Configure:** Convert PostfixAdmin vacations and forwarding into supported SOGo/Sieve settings, preserving enabled state,
   date windows, interval semantics, and local-copy/filter ordering. Timezone and zero-interval policies must be explicit.
   Source mapping and assessment are implemented, including whole-day timezone checks for inactive and expired records.
@@ -197,6 +202,7 @@ Configuration generation is available in the current development version.
   Sieve installation shares transfer identity/isolation checks and retains pending stages, export fingerprints and conflict backups.
   Inactive prefilter staging retains source/policy identity and reconciles uncertain API outcomes against live target data.
   Sender-permission staging preserves baseline ACLs and security attributes, with request reconciliation and live readback.
+  Editable-filter imports retain source identity, native backups and pending preference receipts; unrelated drift blocks resumption.
   Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.

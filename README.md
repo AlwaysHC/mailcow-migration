@@ -11,6 +11,7 @@ Append-only mail copying is available for staged PostfixAdmin batches with isola
 Guarded personal/default Sieve installation and compilation are available separately.
 Reviewed forwarding/vacation prefilters can be staged inactive with API readback and uncertain-request reconciliation.
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
+Native editable SOGo filter import is implemented internally, with backups, conflict checks and script/preference readback.
 Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -581,6 +582,29 @@ Native operations share private temporary-file handling, retaining files on fail
 and empty directory after success. The separate `sogo-target/native-import-state.json` records `native_complete` for this
 backend and retains `import_complete: false`. It cannot satisfy the full webmail-import or target-release guards.
 
+### Editable filter import backend
+
+The internal editable-filter importer supports the reviewed PostfixAdmin Sieve subset. It loads the saved plan's export,
+rejects unsupported or inactive source scripts, and checks every mailbox before changing any filter. The active target script
+must match the exported personal/default script; an existing stored `sogo` script must match too. Comparisons normalize CRLF
+and trailing whitespace. Existing editable rules must be absent, empty or equivalent to the converted rules. Enabled native
+Vacation, Forward or Notification settings block replacement until reconciled.
+
+The importer retains private native backups, stores missing `sogo` scripts through `doveadm sieve put`, and restores only the
+preferences record through XML `sogo-tool restore -p`. It changes `SOGoSieveFilters` while preserving all other defaults and
+the complete settings dictionary, then activates the stored script and verifies preferences, stored contents and active contents.
+XML encoding preserves boolean/numeric types and carriage returns; unsupported control characters fail during preflight.
+
+The private `sogo-filters/state.json` pins the plan, target, export and converted-source fingerprint. Each user has a pending
+receipt with original preferences before any write. Interrupted operations inspect live values before continuing; conflicting
+scripts or unrelated preference drift block continuation. `filters_complete` is recorded only after all users pass readback.
+Once complete, subsequent target user edits are retained. This receipt keeps `import_complete: false` and does not authorize release.
+
+This backend has no CLI command yet. Its caller must hold the workspace lock and supply checks for final mail/Sieve transfer,
+activation, source/target isolation and unchanged source data. Applying also requires explicit stopped-writer confirmation.
+Source exports and readiness are rechecked before completion. Native vacation/forwarding settings, timezone checks and the
+full webmail workflow remain pending; Plesk scripts remain on their separate copy/compile path.
+
 ## PostfixAdmin source logins
 
 Preview the login-control step using the saved plan and configuration:
@@ -722,6 +746,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
 | `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
 | `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
+| `targets.sogo_filters`, `targets.sieve_runtime` | Internal editable-filter import, native preference preservation and Dovecot script readback. |
 | `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |
 | `sieve`, `targets.sieve` | Exported filter selection, conflict backups, guarded installation/removal and native compilation. |
 | `prefilters` | Inactive forwarding/vacation filter staging, target conflict checks and API request reconciliation. |

@@ -7,7 +7,7 @@ from typing import Any, Iterator, Mapping, Optional, Sequence
 from uuid import uuid4
 
 from .mailcow import MailcowTarget
-from .sogo_values import configuration_value, enabled, property_list
+from .sogo_values import configuration_value, enabled, preference_pair, property_list
 from ..core.errors import MigrationError
 from ..core.storage import decode_json, json_fingerprint, local_path, read_text, write_private_text
 from ..plans.roundcube_values import source_truth
@@ -162,6 +162,12 @@ class SogoTarget:
             raise MigrationError("Unsupported SOGo preference section or key")
         with self.native_record(username, json.dumps({key: value}, ensure_ascii=False, allow_nan=False)) as folder:
             self.command(("sogo-tool", "user-preferences", "set", section, username, key, "-f", folder + "/" + username))
+
+    def restore_preferences(self, username: str, preferences: list) -> None:
+        preference_pair({"preferences": preferences}, username)
+        content = '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0">' + property_list({"preferences": preferences}, xml=True) + "</plist>"
+        with self.native_record(username, content) as folder:
+            self.command(("sogo-tool", "restore", "-p", folder, username))
 
     def clear_unknown_user(self, username: str) -> str:
         require_username(username)
