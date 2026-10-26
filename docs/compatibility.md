@@ -19,7 +19,8 @@ Personal/default Sieve installation and compilation are available for PostfixAdm
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
 Explicit sender-permission staging and read-only verification are also available.
 Domain administrator preview/import/check supports reviewed PostfixAdmin mappings and preserves existing target memberships/security.
-Plesk import/isolation, full source isolation and full recovery remain planned work.
+Plesk source isolation, mail/Sieve transfer, activation and quota recalculation are implemented; Plesk webmail integration,
+full PostfixAdmin submission isolation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 All operational CLI commands pass the same loader before dispatch; the wizard remains the file-creation path.
@@ -86,6 +87,12 @@ Readiness and restoration select an existing repair journal without falling back
 import prerequisites still apply independently; this target mode does not enable Plesk import.
 
 ## Initial compatibility matrix
+
+Plesk execution uses bundled native helpers over SSH. Isolation requires Dovecot 2.4, full-address logins, Postfix 3 or newer,
+regexp maps and the retry/error transport. Unsupported username rewriting, master/short logins, service transport overrides,
+changed source settings and detected background writers block continuation. Recovery state is saved privately on both hosts.
+The original Plesk account/filter export is compared under isolation before transfer and activation. Personal Sieve and generated
+forwarding scripts use the shared target installer and native compiler, without imposing the editable SOGo filter subset.
 
 | Component | Existing boundary or agreed runtime | Required configuration |
 | --- | --- | --- |
@@ -243,7 +250,7 @@ These command dependencies cover the available commands and planned migration wo
 Compatibility checks must verify options and behavior, not just executable presence.
 
 The `mail` command runs as root on the Linux Mailcow host and requires completed account staging, source login/delivery/session
-isolation and target access/delivery isolation. Plesk copying is blocked until its isolation adapter is implemented.
+isolation and target access/delivery isolation. Plesk copying uses the native source-isolation adapter and unchanged account/filter snapshots.
 It requires GNU `install` for owned directories, `MAILDIR_SUB=Maildir`, local mail-volume access and rsync support for archive/
 hard-link preservation, safe links, checksums, itemized dry runs, ownership mapping, `--ignore-existing`, statistics and progress.
 Both rsync endpoints are probed. SSH retains strict host-key checking and the configured connection file.

@@ -6,7 +6,6 @@ from .core.errors import MigrationError
 from .core.state import Workspace
 from .core.storage import json_fingerprint
 from .plans.saved import load_saved_plan
-from .sources import SourceKind
 from .targets.mailcow import MailcowTarget
 from .targets.quota_state import QuotaJournal, quota_binding, quota_volume
 from .targets.reconciliation import api_number
@@ -17,8 +16,6 @@ def run_quota(configuration: Configuration, file: Path, *, apply: bool = False, 
     require_transfer_host(writers_stopped)
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
-        if batch.source.kind is not SourceKind.POSTFIXADMIN:
-            raise MigrationError("Quota recalculation requires implemented activation/isolation; the Plesk adapter remains pending")
         if api_number(batch.plan["domainActive"]) != 1:
             raise MigrationError("Disabled primary domain: review quota recalculation under controlled maintenance")
         if batch.blocking_findings:

@@ -8,9 +8,7 @@ from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
 from .plans.saved import load_saved_plan
-from .sources import SourceKind
-from .sources.delivery import SourceDelivery
-from .sources.logins import SourceLogins
+from .sources.isolation import check_source_holds
 from .sources.roundcube import roundcube_sessions
 
 
@@ -40,13 +38,9 @@ def run_roundcube_sessions(
             sessions.check()
             print("No batch RoundCube sessions remain; the selected user-data snapshot is unchanged.")
         else:
-            if batch.source.kind is not SourceKind.POSTFIXADMIN:
-                raise MigrationError("Plesk session revocation requires its source isolation adapter, which is not implemented yet")
             if batch.blocking_findings:
                 raise MigrationError("Resolve saved planning findings before session revocation:\n" + batch.blocking_findings)
-            if batch.plan["mailboxes"]:
-                SourceLogins(batch).check()
-            SourceDelivery(batch, configuration.mailcow.api).check()
+            check_source_holds(batch, configuration)
             sessions.revoke(drafts_saved=drafts_saved)
             print("RoundCube session revocation completed and checked.")
         print("Webmail conversion/import and complete migration readiness remain pending; this operation does not activate accounts.")

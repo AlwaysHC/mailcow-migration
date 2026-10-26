@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from . import SourceConnection
 from ..core.domain import domain_name
@@ -13,8 +13,18 @@ def read_plesk(connection: SourceConnection, action: str, domain: str, diagnosti
     domain_name(domain)
     if action not in ("inspect", "export"):
         raise MigrationError("Unsupported Plesk read operation")
+    return plesk_request(connection, "source", {"action": action, "domain": domain}, diagnostic_file)
+
+
+def plesk_request(
+    connection: SourceConnection, helper: str, request: Mapping[str, Any], diagnostic_file: Optional[Path] = None,
+) -> Any:
+    if helper not in ("source", "isolation"):
+        raise MigrationError("Unsupported Plesk helper")
+    parts = ("common", "source") if helper == "source" else ("common", "forwarding", "isolation")
+    script = "\n".join(read_resource("plesk-" + part + ".py") for part in parts)
     output = connection.ssh.run(
-        ("python3", "-c", read_resource("plesk-source.py")), input_text=json.dumps({"action": action, "domain": domain}),
+        ("python3", "-c", script), input_text=json.dumps(request, allow_nan=False),
         timeout=300, diagnostic_file=diagnostic_file,
     ).stdout
     try:

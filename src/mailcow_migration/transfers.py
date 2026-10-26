@@ -13,9 +13,7 @@ from .core.state import require_identity
 from .core.storage import local_path, read_json, write_private_json
 from .plans.recovery import recovery_plan
 from .plans.saved import SavedPlan
-from .sources import SourceKind
-from .sources.delivery import SourceDelivery
-from .sources.logins import SourceLogins
+from .sources.isolation import check_source_holds
 from .sources.roundcube import roundcube_sessions
 from .targets.account_inventory import account_inventory
 from .targets.isolation import TargetIsolation, active_target_isolation
@@ -49,8 +47,6 @@ class TransferContext:
                 "api": self.configuration.mailcow.api, "mailcow_directory": self.configuration.mailcow.directory}
 
     def before_transfer(self) -> None:
-        if self.batch.source.kind is not SourceKind.POSTFIXADMIN:
-            raise MigrationError("Transfer requires implemented source isolation; the Plesk isolation adapter is still pending")
         require_before_activation(account_journal(self.batch, self.configuration).read())
 
     def state(self) -> Mapping[str, Any]:
@@ -117,7 +113,5 @@ class TransferContext:
 
     def check_holds(self, target: MailcowTarget) -> None:
         self.target_holds(target).check()
-        if self.batch.plan["mailboxes"]:
-            SourceLogins(self.batch).check()
-        SourceDelivery(self.batch, self.configuration.mailcow.api).check()
+        check_source_holds(self.batch, self.configuration)
         roundcube_sessions(self.batch, self.configuration).check()

@@ -47,13 +47,16 @@ def activate_prefilters(
 ) -> None:
     """Caller holds the shared lock; verify_ready checks activation phase, stopped writers and source/target isolation."""
     require_mailcow_host()
-    if context.batch.source.kind is not SourceKind.POSTFIXADMIN:
-        raise MigrationError("Prefilter activation requires the implemented PostfixAdmin isolation workflow")
     if apply and not activate:
         raise MigrationError("Prefilter verification cannot request writes")
     if reviewed.blockers:
         raise MigrationError("Resolve the saved webmail findings before activation:\n" + "\n".join(reviewed.blockers))
     evidence.verify()
+    if context.batch.source.kind is SourceKind.PLESK:
+        if reviewed.proposal["prefilters"] or reviewed.proposal["vacations"] or reviewed.proposal["nativeSettings"]["users"]:
+            raise MigrationError("Plesk personal Sieve cannot be combined with PostfixAdmin prefilter/native-settings operations")
+        verify_ready()
+        return
     journal, staged = prefilter_staging(context, evidence, reviewed)
     if not journal.workspace.path(journal.relative_path).exists():
         if reviewed.forwarding["forwardings"] or any(

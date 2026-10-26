@@ -41,6 +41,8 @@ def load_sieve_evidence(plan: Mapping[str, Any], evidence: ExportEvidence) -> Si
             continue
         script = row["script"]
         if row["forwarding"]:
+            if script:
+                raise MigrationError(row["username"] + ": forwarding with personal Sieve requires an explicit ordering adapter")
             targets = [target.lower() for target in row["destinations"]]
             script = ('require ["copy"];\n' if row["delivery"] else "") + "\n".join(
                 "redirect{} {};".format(" :copy" if row["delivery"] else "", sieve_string(target)) for target in targets

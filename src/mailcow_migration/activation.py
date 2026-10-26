@@ -13,12 +13,12 @@ from .plans.saved import load_saved_plan
 from .plans.security import account_security_policy
 from .plans.saved_webmail import load_saved_webmail
 from .senders import verify_senders
-from .sources import SourceKind
 from .targets.account_inventory import account_inventory
 from .targets.mailcow import MailcowTarget
 from .targets.passwords import verify_mailbox_passwords
 from .targets.prefilter_activation import activate_prefilters
 from .targets.reconciliation import reconcile_pending
+from .targets.sieve import SieveSource
 from .transfers import TransferContext, require_transfer_host
 
 
@@ -30,8 +30,6 @@ def run_activation(
         raise ConfigurationError("Activation requires --ready after reviewing the batch and completing its cutover prerequisites")
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
-        if batch.source.kind is not SourceKind.POSTFIXADMIN:
-            raise MigrationError("Account activation requires implemented source isolation; the Plesk adapter remains pending")
         if batch.blocking_findings:
             raise MigrationError("Resolve saved planning findings before activation:\n" + batch.blocking_findings)
         context = TransferContext(batch, configuration)
@@ -64,6 +62,8 @@ def run_activation(
             print("Batch already activated; its account inventory matches the plan. Webmail import and release are separate.")
             return 0
         context.check_holds(target)
+        if context.final_state().get("sieveEvidenceHash") != SieveSource.read(batch.plan, evidence).fingerprint():
+            raise MigrationError("Copied Sieve differs from the saved export; complete Sieve verification before activation")
         verify_mailbox_passwords(batch.plan, target, batch.directory)
         reconcile_pending(journal, target.api)
 

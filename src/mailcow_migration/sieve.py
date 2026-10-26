@@ -1,4 +1,5 @@
 import tempfile
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -8,11 +9,12 @@ from .configuration import Configuration
 from .core.commands import run_command
 from .core.errors import MigrationError
 from .core.state import Workspace
-from .core.storage import local_path, private_directory
+from .core.storage import local_path, private_directory, write_private_text
 from .plans.evidence import load_plan_export
 from .plans.native_settings import mailbox_sieve
 from .plans.saved import load_saved_plan
 from .plans.sieve_evidence import load_sieve_evidence, sieve_inventory_blockers
+from .sources import SourceKind
 from .targets.mailcow import MailcowTarget
 from .targets.sieve import SieveScript, read_sieve_file, sieve_scripts
 from .targets.storage import inspect_mail_storage
@@ -45,7 +47,7 @@ class SieveTransfer(TransferContext):
             evidence = load_plan_export(self.configuration, self.batch, exported)
             source = load_sieve_evidence(self.batch.plan, evidence)
             blockers = sieve_inventory_blockers(source)
-            for row in self.batch.plan["mailboxes"]:
+            for row in self.batch.plan["mailboxes"] if self.batch.source.kind is SourceKind.POSTFIXADMIN else ():
                 try:
                     mailbox_sieve(row["username"], source)
                 except MigrationError as error:
@@ -75,14 +77,21 @@ class SieveTransfer(TransferContext):
                           else "Would remove personal Sieve and its stale binary, if present, and use target default filtering.")
                     continue
                 script.check_unchanged(evidence.data, root)
+                evidence.verify()
                 if script.conflict:
                     state = self.backup(state, script, directory)
                 script.check_unchanged(evidence.data, root)
                 state = self.save(state, sieveStage="install and compile" if script.content is not None else "select default filtering",
                                   sieveUser=script.username)
                 if script.content is not None:
-                    run_command(("install", "-m", "600", "-o", str(storage.uid), "-g", str(storage.gid), str(script.source), str(script.target)),
-                                label="Install personal Sieve", diagnostic_file=directory / ("sieve-install-" + uuid4().hex + ".txt"))
+                    with tempfile.TemporaryDirectory(dir=directory) if script.source is None else nullcontext(None) as prepared:
+                        source_file = script.source
+                        if source_file is None:
+                            source_file = Path(prepared) / "personal.sieve"
+                            write_private_text(source_file, script.content.decode("utf-8"))
+                        run_command(("install", "-m", "600", "-o", str(storage.uid), "-g", str(storage.gid),
+                                     str(source_file), str(script.target)), label="Install personal Sieve",
+                                    diagnostic_file=directory / ("sieve-install-" + uuid4().hex + ".txt"))
                     target.compose(("exec", "-T", "--user", "vmail", "dovecot-mailcow", "sievec",
                                     "/var/vmail/sieve/" + script.username + ".sieve"),
                                    diagnostic_file=directory / ("sieve-compile-" + uuid4().hex + ".txt"))

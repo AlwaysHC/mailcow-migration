@@ -4,7 +4,8 @@ The first release covers domain-by-domain mail migration from PostfixAdmin or Pl
 Checked items are implemented. Unchecked items are not fully covered; notes distinguish implemented parts from remaining work.
 The pre-alpha supports configuration, source inspection, private exports, planning, staging and account verification.
 PostfixAdmin isolation, mail/Sieve transfer, activation, quota recalculation and webmail import are available as explicit operations.
-Plesk execution, full handoff and end-to-end validation remain unfinished.
+Plesk isolation, mail/Sieve transfer, activation and quota recalculation are also available. Webmail integration,
+full handoff and end-to-end validation remain unfinished.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -87,15 +88,17 @@ Configuration generation is available in the current development version.
   Share format validation across planning and staging, check live Dovecot scheme availability and read back stored hashes before
   staging completion and guarded activation. Explicit `verify --passwords` compares the original hashes; routine verification
   preserves later password changes. Native reconciliation remains available; IMAP/SMTP login checks belong to operator handoff.
-- [ ] **Configure:** Preserve mailbox forwarding destinations and keep-copy behavior. Account for personal-filter ordering;
+- [x] **Configure:** Preserve mailbox forwarding destinations and keep-copy behavior. Account for personal-filter ordering;
   the current Plesk path blocks forwarding combined with personal Sieve until an ordering adapter exists.
+  PostfixAdmin uses reviewed native settings/prefilters. Plesk copies its generated redirect/copy/stop script from verified export evidence.
 - [x] Inspect the target mail volume and vmail identity, validate mailbox paths, and probe sender/receiver transfer capabilities separately.
   Compare existing Maildirs with checksum dry runs, retaining file-type/content and alternate-message-path blockers.
   Keep source checks pending with fixed quotas or source mapping blockers, and retain staging/isolation/journal guards before actual copying.
-- [ ] **Preserve:** Copy Maildir messages and supported metadata with append-only rsync, preserving existing target files.
+- [x] **Preserve:** Copy Maildir messages and supported metadata with append-only rsync, preserving existing target files.
   Conflicting content, unsafe links, source changes, and unaccounted writers must stop copying or activation.
   Include final verification and target quota recalculation.
-  The PostfixAdmin path includes final-pass checks and quota recalculation; Plesk copying remains blocked on its isolation adapter.
+  Both sources use shared transfer/volume receipts, final-pass checks, guarded activation and quota recalculation.
+  Plesk additionally verifies its complete account/filter snapshot under native login/submission/delivery isolation.
 - [x] Provide guarded PostfixAdmin mail preview/apply with explicit stopped-writer confirmation and live isolation/inventory checks.
   Check all source Maildirs before copying, reuse checksum conflict checks, preserve existing files and show rsync counts/progress.
   Bind private transfer receipts to source/target identity, clear prior final-pass eligibility before each applied attempt,
@@ -121,12 +124,13 @@ Configuration generation is available in the current development version.
 
 ## Filters and webmail
 
-- [ ] **Preserve:** Inventory and copy supported personal/default Sieve, compile it on the target, and preserve activation state.
+- [x] **Preserve:** Inventory and copy supported personal/default Sieve, compile it on the target, and preserve activation state.
   Default-filter selection and replacing existing target scripts require explicit decisions and backups.
+  Plesk scripts and forwarding come from the private JSON export, bypass editable-filter conversion, and use the same installation/readback guards.
 - [x] Provide guarded PostfixAdmin Sieve preview/apply using the planning export and shared transfer isolation/journal checks.
   Preserve personal/default selection, inactive/unsupported-script blockers, full-batch inspection, regular-file/ancestor checks,
   private conflict backups, vmail ownership and native compilation. Clear earlier Sieve completion before each applied attempt.
-  Editable SOGo integration is available through webmail import; Plesk installation and end-to-end validation remain pending.
+  Editable SOGo integration is available for PostfixAdmin; Plesk installation is supported. End-to-end validation remains pending.
 - [x] **Preserve:** Convert the supported PostfixAdmin Sieve subset into planned editable SOGo filters.
   Save personal/default scripts, converted rules, blockers, native preferences and staging prefilters in a private webmail plan.
   Keep Plesk personal Sieve and forwarding scripts on their copy/compile path without imposing editable-filter conversion.
@@ -203,6 +207,8 @@ Configuration generation is available in the current development version.
   Source assessment is available; guided selections/exclusions, credentials, privilege decisions, application and target verification remain pending.
 - [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
   and revoke webmail access while leaving unrelated domains operational.
+  Plesk supports native preview/freeze/check/pre-activation release, Dovecot denial, SMTP/deferred delivery, worker draining,
+  writer checks and RoundCube revocation. Combined PostfixAdmin submission checks remain pending.
 - [x] Preview, freeze, check and release PostfixAdmin batch logins using the supported SQL passdb and exact query exclusions.
   Preserve other batches' exclusions, source-side full configuration backups, cache flushing and session checks.
   Retain a source/plan-bound operation journal and block changes after target activation starts or during uncertain target writes.

@@ -6,6 +6,8 @@ from typing import Any, Mapping, Optional, Tuple
 from ..core.errors import MigrationError
 from ..core.storage import json_fingerprint, local_path
 from ..plans.evidence import ExportEvidence
+from ..plans.sieve_evidence import load_sieve_evidence
+from ..sources import SourceKind
 from .storage import MailStorage
 
 
@@ -27,13 +29,17 @@ def read_sieve_file(path: Path, root: Path) -> Optional[bytes]:
 
 @dataclass(frozen=True)
 class SieveSource:
-    files: Mapping[str, Path]
+    files: Mapping[str, Optional[Path]]
     scripts: Mapping[str, Optional[bytes]] = field(repr=False)
-    default_file: Path
+    default_file: Optional[Path]
     default_content: Optional[bytes] = field(repr=False)
 
     @classmethod
     def read(cls, plan: Mapping[str, Any], evidence: ExportEvidence) -> "SieveSource":
+        if evidence.source.connection.kind is SourceKind.PLESK:
+            source = load_sieve_evidence(plan, evidence)
+            return cls(dict.fromkeys(source.scripts), {user: script.encode("utf-8") if script is not None else None
+                                                      for user, script in source.scripts.items()}, None, None)
         files = {row["username"]: evidence.data / "sieve" / plan["domain"] / row["payload"]["local_part"] / ".dovecot.sieve"
                  for row in plan["mailboxes"]}
         default = evidence.data / "config/default.sieve"
@@ -53,7 +59,7 @@ class SieveSource:
 @dataclass(frozen=True)
 class SieveScript:
     username: str
-    source: Path
+    source: Optional[Path]
     target: Path
     binary: Path
     content: Optional[bytes] = field(repr=False)
@@ -65,7 +71,8 @@ class SieveScript:
         return self.previous is not None and self.previous != self.content or self.content is None and self.compiled is not None
 
     def check_unchanged(self, exported: Path, root: Path) -> None:
-        if (read_sieve_file(self.source, exported) != self.content or read_sieve_file(self.target, root) != self.previous
+        if (self.source is not None and read_sieve_file(self.source, exported) != self.content
+                or read_sieve_file(self.target, root) != self.previous
                 or read_sieve_file(self.binary, root) != self.compiled):
             raise MigrationError(self.username + ": Sieve files changed after preflight; retain the journal and backups")
 

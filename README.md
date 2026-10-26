@@ -8,7 +8,8 @@ Target isolation and PostfixAdmin login and delivery controls are available as s
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
 SOGo target preparation can check/configure custom identity support, inspect existing user-data conflicts and assess target folder display state.
 An explicit user-preparation action can refresh missing SOGo user sources and reconcile cached unknown-user lookups.
-Append-only mail copying is available for staged PostfixAdmin batches with isolation checks and explicit stopped-writer confirmation.
+Append-only mail copying is available for both sources with isolation checks and explicit stopped-writer confirmation.
+Plesk supports journaled source isolation, personal Sieve/forwarding installation, guarded activation and quota recalculation.
 Guarded personal/default Sieve installation and compilation are available separately.
 Reviewed forwarding/vacation prefilters can be staged inactive with API readback and uncertain-request reconciliation.
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
@@ -31,6 +32,7 @@ This snapshot has not been validated end to end.
 | `target-isolation` | Preview, pause, check and restore Mailcow access/delivery; support separately journaled webmail repair after activation. |
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
+| `source-isolation` | Preview, freeze, check and release Plesk login/submission/delivery controls before activation. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
 | `sogo-target` | Prepare identity settings/user lookups, check effective settings, and inspect native data/folder-state conflicts. |
 | `mail` | Preview or append Maildir files under isolation, preserving existing files and recording applied/final passes. |
@@ -364,7 +366,7 @@ mailcow-migrate activate --config migration.json --plan /root/mailcow-in-progres
 
 Both confirmations are required for preview and apply. `--ready` confirms review of the batch and pre-activation cutover checks;
 `--writers-stopped` confirms batch writes, submission and account administration are stopped on both servers. The command runs
-as root on the Linux Mailcow host and currently supports PostfixAdmin. It rechecks account/recovery inventories, sender grants,
+as root on the Linux Mailcow host and supports both sources. It rechecks account/recovery inventories, sender grants,
 final mail/Sieve receipts, source login/delivery/session isolation, target access/delivery holds and the saved export/webmail proposal.
 Unsupported mappings, changed target IDs, unresolved writes or lost isolation block further edits.
 
@@ -584,7 +586,7 @@ exported script fingerprint and default-selection choice, then sets `sieve: true
 isolation/storage checks. Mail completion fields are retained separately. Failures leave the pending state and any backups;
 reruns inspect the actual files again, and any new conflict still requires explicit replacement permission.
 
-This step currently supports PostfixAdmin. It installs exported filters but does not import editable SOGo filters, apply
+This step supports both sources. It installs exported filters but does not import editable SOGo filters, apply
 vacation/forwarding settings, recalculate quota, activate accounts or release isolation. Those steps and full source-drift
 verification remain separate; keep source administration and user edits frozen while using the saved export.
 
@@ -650,8 +652,8 @@ The helper matches decoded ownership and deletes each session only if both its I
 changed sessions stop the operation. It then checks for zero remaining batch sessions and rereads the persistent snapshot.
 
 `roundcube-sessions --action revoke --apply` can resume this session step separately after the same live login and delivery
-checks. `--action check` verifies completed revocation without changing sessions. Plesk currently supports preview only;
-revocation requires its pending source-isolation adapter. No operation changes contacts, identities or preferences on the source,
+checks. `--action check` verifies completed revocation without changing sessions. Plesk revocation uses its native source-isolation checks.
+No operation changes contacts, identities or preferences on the source,
 imports data into SOGo, copies mail or activates accounts.
 
 Private evidence lives under `roundcube-sessions` in the batch directory. Its journal records the source, target, plan,
@@ -925,9 +927,27 @@ source logins alone does not remove them. The delivery journal explicitly record
 `webmail_sessions_verified: false`; session verification is recorded separately in the RoundCube session journal.
 Complete submission checks and combined source readiness remain pending. Delivery receipts alone do not authorize
 copying, activation or cutover; the mail command additionally checks target isolation and requires stopped-writer confirmation.
-Plesk retains its separate pending adapter.
+Plesk uses the separate native `source-isolation` adapter.
 
 ## Target isolation
+
+For Plesk, prepare/review the RoundCube snapshot and SOGo requirements, then use the separate source isolation command:
+
+```bash
+mailcow-migrate source-isolation --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json
+```
+
+`--action freeze --apply --writers-stopped` requires saved drafts and reviewed proposals. It preserves source settings, installs
+the Dovecot denial and Postfix submission/recipient/transport controls, drains old workers, disconnects sessions and revokes
+RoundCube sessions. Source account/filter snapshots must remain unchanged. `--action check` verifies isolation and sessions.
+`--action release --apply` restores source access/delivery only before activation and with no uncertain account request;
+it retains target staging/isolation. Keep the local `source-isolation.json` and remote recovery state together.
+
+The supported Plesk path requires Dovecot 2.4, full-address logins, Postfix 3 or newer with regexp/retry support, and no unsupported
+username rewrites or service transport overrides. Shared settings and other batches remain preserved. Interrupted changes retain
+their pending operation and backups. After source isolation and inactive account staging, pause the target and use the same
+`mail`, `sieve`, `activate` and `quota` commands. Plesk Sieve is read from its verified JSON export and compiled natively; forwarding
+with an existing personal script remains blocked to preserve ordering. Plesk webmail import/handoff integration remains pending.
 
 After account staging, preview Mailcow isolation using the same saved plan and configuration:
 

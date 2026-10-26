@@ -22,6 +22,7 @@ from .senders import run_senders
 from .sogo_target import run_sogo_target
 from .sieve import run_sieve
 from .source_delivery import run_source_delivery
+from .source_isolation import run_source_isolation
 from .source_logins import run_source_logins
 from .source_selection import run_source_selection
 from .webmail import run_webmail
@@ -51,6 +52,7 @@ def parser() -> argparse.ArgumentParser:
         ("target-isolation", "Preview, pause or check batch access and writers on Mailcow; retain guarded restoration state"),
         ("source-logins", "Preview, freeze, check or release PostfixAdmin batch logins while preserving other query exclusions"),
         ("source-delivery", "Preview, pause or check PostfixAdmin delivery, recipient routing and RoundCube sessions"),
+        ("source-isolation", "Preview, freeze, check or release Plesk logins, submission and delivery with saved recovery state"),
         ("roundcube-sessions", "Preview RoundCube user data and batch sessions; revoke or check sessions under verified source isolation"),
         ("sogo-target", "Preview or configure required SOGo settings and inspect existing user-data conflicts"),
         ("mail", "Preview or append source Maildirs under verified isolation; preserve existing target files"),
@@ -75,7 +77,7 @@ def parser() -> argparse.ArgumentParser:
         if name == "plan":
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
-        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery",
+        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "source-isolation",
                     "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "admins", "activate", "quota", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
@@ -118,6 +120,11 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--action", choices=("preview", "freeze", "check", "release"), default="preview",
                                  help="Defaults to read-only preview; check verifies a completed login freeze")
             command.add_argument("--apply", action="store_true", help="Required for freeze/release; both are forbidden after activation starts")
+        if name == "source-isolation":
+            command.add_argument("--action", choices=("preview", "freeze", "check", "release"), default="preview")
+            command.add_argument("--apply", action="store_true", help="Required for freeze/release; retain local and source recovery journals")
+            command.add_argument("--writers-stopped", action="store_true",
+                                 help="Confirm custom source imports and account administration are stopped")
         if name == "source-delivery":
             command.add_argument("--action", choices=("preview", "pause", "check"), default="preview", help="Defaults to read-only preview")
             command.add_argument("--apply", action="store_true", help="Pause delivery and revoke RoundCube sessions after isolation and draft checks")
@@ -171,6 +178,9 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             return run_source_logins(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "source-delivery":
             return run_source_delivery(configuration, options.plan, action=options.action, apply=options.apply)
+        elif options.command == "source-isolation":
+            return run_source_isolation(configuration, options.plan, action=options.action, apply=options.apply,
+                                        writers_stopped=options.writers_stopped)
         elif options.command == "roundcube-sessions":
             return run_roundcube_sessions(configuration, options.plan, action=options.action, apply=options.apply,
                                           directory=options.directory, drafts_saved=options.drafts_saved,
