@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from .accounts import account_journal, account_mutations, validate_account_journal, verify_account_inventory
+from .accounts import account_activation_mutations, account_journal, account_mutations, validate_account_journal, verify_account_inventory
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
@@ -28,11 +28,14 @@ def run_target_isolation(configuration: Configuration, file: Path, *, action: st
         if action == "release":
             isolation.release(state)
             return 0
-        if state.get("activated") or "enable domain for activation" in state["done"]:
+        if action != "check" and ("activationRequests" in state or state.get("activated") or "enable domain for activation" in state["done"]):
             raise MigrationError("Initial target isolation is forbidden after activation starts; use the matching recovery workflow")
         recovery = recovery_plan(batch.plan)
-        validate_account_journal(state, account_mutations(batch.plan, recovery["emails"], reuse_domain=bool(state.get("existingDomain"))))
-        verify_account_inventory(batch.plan, account_inventory(target.api), recovery["emails"], state)
+        inventory = account_inventory(target.api)
+        activation = account_activation_mutations(batch.plan, inventory) if "activationRequests" in state else ()
+        staging = account_mutations(batch.plan, recovery["emails"], reuse_domain=bool(state.get("existingDomain")))
+        validate_account_journal(state, staging, activation)
+        verify_account_inventory(batch.plan, inventory, recovery["emails"], state)
         if action == "preview":
             users, jobs = isolation.preflight()
             print("Would defer delivery and block SOGo resource paths for: " + ", ".join(batch.plan["domains"]))

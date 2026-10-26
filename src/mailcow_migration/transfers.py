@@ -90,6 +90,9 @@ class TransferContext:
         if findings:
             raise MigrationError("Resolve saved planning findings before transfer:\n" + findings)
         self.check_accounts(target)
+        self.check_holds(target)
+
+    def check_holds(self, target: MailcowTarget) -> None:
         isolation = TargetIsolation(target, self.batch)
         paused = isolation.state()
         if paused.get("paused") is not True or paused.get("released") or paused.get("pending") or paused.get("routePending"):

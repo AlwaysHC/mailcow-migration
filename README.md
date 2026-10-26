@@ -13,8 +13,8 @@ Reviewed forwarding/vacation prefilters can be staged inactive with API readback
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
 Native editable SOGo filter import is implemented internally, with backups, conflict checks and script/preference readback.
 Native vacation/forwarding import is also implemented internally, including container timezone checks and prefilter handoff.
-Staged prefilter activation is implemented internally with copied-Sieve checks and preservation of completed native handoffs.
-Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
+Guarded PostfixAdmin account activation includes copied-Sieve checks, staged prefilters and preservation of completed native handoffs.
+Full source isolation, native SOGo command integration and full cutover remain pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -35,6 +35,7 @@ This snapshot has not been validated end to end.
 | `sieve` | Preview or install exported personal/default filters, with explicit conflict replacement, backups and target compilation. |
 | `prefilters` | Preview or stage inactive forwarding/vacation prefilters from the reviewed webmail plan. |
 | `senders` | Preview, merge or verify reviewed sender permissions, retaining existing grants and mailbox security settings. |
+| `activate` | Restore planned account/filter activity after final transfer checks, retaining source and target isolation. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -277,10 +278,39 @@ request is recorded as completed without another API write. Thus a preview or ve
 leaving target accounts unchanged. Password-check diagnostics, when present, are saved privately in the batch directory.
 
 `verify` requires completed staging receipts and compares domain limits, account activity, mailbox quotas/names/quarantine,
-aliases, alias domains, BCC and recovery emails with the saved plan. It does not test password login, messages, filters,
-sender permissions or delivery. Message copying is available separately; full source isolation, activation and full migration recovery remain pending;
-these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
+aliases, alias domains, BCC and recovery emails with the saved plan and recorded activation phase, including interrupted activation.
+It does not test password login, messages, filters, sender permissions or delivery. Message copying and guarded activation are
+available separately; full source isolation and full migration recovery remain pending. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
+## Account activation
+
+After completing staging, explicit sender grants, prefilter staging, the final mail pass and Sieve installation, preview activation:
+
+```bash
+mailcow-migrate activate --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json \
+  --export /root/mailcow-in-progress/exports/example.org/EXPORT_ID --ready --writers-stopped
+```
+
+Both confirmations are required for preview and apply. `--ready` confirms review of the batch and pre-activation cutover checks;
+`--writers-stopped` confirms batch writes, submission and account administration are stopped on both servers. The command runs
+as root on the Linux Mailcow host and currently supports PostfixAdmin. It rechecks account/recovery inventories, sender grants,
+final mail/Sieve receipts, source login/delivery/session isolation, target access/delivery holds and the saved export/webmail proposal.
+Unsupported mappings, changed target IDs, unresolved writes or lost isolation block further edits.
+
+Add `--apply` to temporarily enable the domain, activate the reviewed forwarding/vacation prefilters, restore each mailbox and
+alias/alias-domain's planned activity, enable planned BCC records, then restore the domain's planned activity. Source-inactive
+accounts remain inactive. Native SOGo handoffs retain their recorded prefilter activity instead of enabling duplicate rules.
+
+Activation pins the exact ordered requests and target IDs in `state.json`. Each edit records intent first and is read back.
+Rerunning with the same plan resumes from receipts; an uncertain write is accepted only when its requested target value can be
+verified. Missing or mismatched outcomes remain pending. Preview and `verify` may update receipts for confirmed earlier requests
+without sending account edits. Keep all journals together; staging and transfers cannot continue once activation starts.
+
+The completion marker is saved only after account, sender, filter and isolation checks succeed. Target protocol access, SOGo
+maintenance controls, sync-job pauses and delivery holds remain in place; source controls remain in place too. `verify` and
+`target-isolation --action check` can inspect this activated-but-isolated batch. Complete webmail import and its verification before
+target release. Quota recalculation, native import CLI integration, DNS/source-routing handoff and full migration completion remain pending.
 
 ## Sender permissions
 
@@ -354,8 +384,8 @@ Verified native SOGo settings receipts take precedence: retained forwarding pref
 prefilters replaced by native settings stay disabled. An uncertain native settings write blocks activation. Native settings
 import also accepts valid earlier prefilter activation receipts, preserving the order of the eventual account/webmail workflow.
 
-This backend has no CLI command yet. Its caller must hold the workspace lock and check the account activation phase, stopped
-writers and source/target isolation before writes. Account activation, full webmail completion and release remain pending.
+The `activate` command calls this backend under the workspace lock, checking account phase, stopped writers and source/target
+isolation. There is no standalone filter-activation command. Full webmail completion and release remain separate.
 
 ## Mail copying
 
@@ -580,7 +610,7 @@ under isolation before a future import; this assessment is not an import receipt
 An existing destination address book without this application's import journal is a conflict, even if its contents appear to
 match. Native inspection never adopts that book or overwrites conflicting data. Read-only inspection reports missing user
 sources or failed lookups; the separate `prepare-users --apply` action can refresh sources and reconcile unknown-user caches.
-Configuration/user assessments retain `import_ready: false`; the import command and activation workflow remain pending.
+Configuration/user assessments retain `import_ready: false`; the import command remains pending. Account activation is a separate guarded step.
 
 ### Native import backend
 
@@ -798,6 +828,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `prefilters` | Inactive forwarding/vacation filter staging, target conflict checks and API request reconciliation. |
 | `targets.prefilter_activation` | Internal prefilter activation/readback, copied-Sieve guards and preservation of native handoffs. |
 | `senders`, `targets.senders` | Explicit sender ACL merges, security-attribute preservation and live permission verification. |
+| `activation`, `accounts` | Ordered account activation, pinned target IDs, partial-phase inventory checks and uncertain-write reconciliation. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

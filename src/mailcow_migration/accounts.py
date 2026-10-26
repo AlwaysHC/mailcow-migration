@@ -15,7 +15,7 @@ from .plans.saved import SavedPlan, load_saved_plan
 from .targets.account_inventory import DOMAIN_FIELDS, account_conflicts, account_inventory, domain_value, native_route_conflicts
 from .targets.mailcow import MailcowTarget
 from .targets.passwords import verify_target_password
-from .targets.reconciliation import alias_destinations, api_number, reconcile_pending
+from .targets.reconciliation import alias_destinations, api_number, api_string, reconcile_pending
 
 
 @dataclass(frozen=True)
@@ -44,18 +44,87 @@ def account_mutations(plan: Mapping[str, Any], recovery: list, *, reuse_domain: 
     )
 
 
-def validate_account_journal(state: Mapping[str, Any], operations: Tuple[AccountMutation, ...]) -> None:
+def account_requests(operations: Tuple[AccountMutation, ...]) -> Mapping[str, Any]:
     expected = {row.identifier: {"endpoint": row.endpoint, "payload": row.payload} for row in operations}
     if len(expected) != len(operations):
         raise MigrationError("Plan repeats an account operation identity; resolve the source mappings")
+    return expected
+
+
+def activation_flag(value: Any) -> int:
+    number = api_number(value)
+    if number not in (0, 1):
+        raise MigrationError("Account activation requires a valid planned activity flag")
+    return int(number)
+
+
+def account_activation_mutations(plan: Mapping[str, Any], inventory: Mapping[str, list]) -> Tuple[AccountMutation, ...]:
+    def target_id(kind: str, fields: Mapping[str, Any]) -> str:
+        matches = [row for row in inventory[kind] if all(row.get(key) == value for key, value in fields.items())]
+        if len(matches) != 1 or type(matches[0].get("id")) not in (str, int) or not api_string(matches[0]["id"]):
+            raise MigrationError("Activation requires one target {} with a valid ID: {}".format(kind, fields))
+        return api_string(matches[0]["id"])
+
+    for row in plan["mailboxes"]:
+        if sum(item.get("username") == row["username"] for item in inventory["mailbox"]) != 1:
+            raise MigrationError("Activation requires one target mailbox: " + row["username"])
+    for row in plan["aliasDomains"]:
+        if sum(item.get("alias_domain") == row["alias_domain"] for item in inventory["alias-domain"]) != 1:
+            raise MigrationError("Activation requires one target alias domain: " + row["alias_domain"])
+    if sum((row.get("domain_name") or row.get("domain")) == plan["domain"] for row in inventory["domain"]) != 1:
+        raise MigrationError("Activation requires one target primary domain: " + plan["domain"])
+    return (
+        AccountMutation("enable domain for activation", "edit/domain", {"items": [plan["domain"]], "attr": {"active": 1}}),
+        *(AccountMutation("activate mailbox " + row["username"], "edit/mailbox", {
+            "items": [row["username"]], "attr": {"active": activation_flag(row["active"])},
+        }) for row in plan["mailboxes"]),
+        *(AccountMutation("activate alias domain " + row["alias_domain"], "edit/alias-domain", {
+            "items": [row["alias_domain"]], "attr": {"active": activation_flag(row["active"])},
+        }) for row in plan["aliasDomains"]),
+        *(AccountMutation("activate alias " + row["address"], "edit/alias", {
+            "items": [target_id("alias", {"address": row["address"]})], "attr": {"active": activation_flag(row["active"])},
+        }) for row in plan["aliases"] if not row["mailbox"]),
+        *(AccountMutation("activate BCC " + row["local_dest"], "edit/bcc", {
+            "items": [target_id("bcc", {key: row[key] for key in ("local_dest", "bcc_dest", "type")})], "attr": {"active": 1},
+        }) for row in plan["bcc"]),
+        AccountMutation("restore domain state", "edit/domain", {
+            "items": [plan["domain"]], "attr": {"active": activation_flag(plan["domainActive"])},
+        }),
+    )
+
+
+def validate_account_journal(
+    state: Mapping[str, Any], operations: Tuple[AccountMutation, ...], activation: Tuple[AccountMutation, ...] = (),
+) -> None:
+    expected = account_requests((*operations, *activation))
+    if any(key in state and type(state[key]) is not bool for key in ("accounts", "activated")):
+        raise MigrationError("Invalid account completion markers; retain the journal")
     if any(name not in expected for name in state["done"]):
-        raise MigrationError("The journal contains operations outside account staging; retain it for the matching recovery workflow")
+        raise MigrationError("The journal contains operations outside the selected account phase; retain it for the matching workflow")
     if state.get("pending") and (state["pending"] not in expected or state.get("pendingRequest") != expected[state["pending"]]):
         raise MigrationError("The pending request differs from this account plan; no reconciliation or write was attempted")
     if "pendingRequest" in state and not state.get("pending"):
         raise MigrationError("The journal has a request without an operation identity; retain it for reconciliation")
     if state.get("accounts") and any(row.identifier not in state["done"] for row in operations):
         raise MigrationError("The account-completion marker is inconsistent with the saved operations")
+    if activation:
+        if state.get("accounts") is not True or state.get("activationRequests") != account_requests(activation):
+            raise MigrationError("Saved activation requests differ from the staged plan or target IDs; no write was repeated")
+        identifiers = [row.identifier for row in activation]
+        done = [identifier for identifier in state["done"] if identifier in identifiers]
+        pending = state.get("pending")
+        if (done != identifiers[:len(done)] or pending and (len(done) == len(identifiers) or pending != identifiers[len(done)])
+                or state.get("activated") and (pending or done != identifiers)):
+            raise MigrationError("Account activation order or completion differs from its receipts; retain the journal")
+    elif "activationRequests" in state or state.get("activated"):
+        raise MigrationError("Use the activation workflow to validate this account journal")
+
+
+def account_activity_matches(state: Mapping[str, Any], identifier: str, actual: Any, desired: Any, before: int = 0) -> bool:
+    desired = activation_flag(desired)
+    expected = desired if state.get("activated") or identifier in state["done"] else before
+    allowed = (expected, desired) if state.get("pending") == identifier else (expected,)
+    return api_number(actual) in allowed
 
 
 def verify_recovery_emails(emails: list, mailboxes: list) -> None:
@@ -67,17 +136,21 @@ def verify_recovery_emails(emails: list, mailboxes: list) -> None:
 
 
 def verify_account_inventory(plan: Mapping[str, Any], inventory: Mapping[str, list], recovery: list, state: Mapping[str, Any]) -> None:
-    activated = bool(state.get("activated"))
     failures = []
     primary = next((row for row in inventory["domain"] if (row.get("domain_name") or row.get("domain")) == plan["domain"]), {})
-    if not primary or api_number(primary.get("active")) != (plan["domainActive"] if activated else 0):
+    restoring = state.get("activated") or "restore domain state" in state["done"] or state.get("pending") == "restore domain state"
+    if not primary or not account_activity_matches(
+        state, "restore domain state" if restoring else "enable domain for activation", primary.get("active"),
+        plan["domainActive"] if restoring else 1, 1 if restoring else 0,
+    ):
         failures.append("domain " + plan["domain"])
     for key, column in DOMAIN_FIELDS.items():
         if primary.get(column) is None or api_number(domain_value(primary, key)) != plan["domainPayload"][key]:
             failures.append("domain {}: {}".format(plan["domain"], column))
     for row in plan["mailboxes"]:
         found = next((item for item in inventory["mailbox"] if item.get("username") == row["username"]), {})
-        if (not found or found.get("name") != row["payload"]["name"] or api_number(found.get("active")) != (row["active"] if activated else 0)
+        if (not found or found.get("name") != row["payload"]["name"]
+                or not account_activity_matches(state, "activate mailbox " + row["username"], found.get("active"), row["active"])
                 or api_number(found.get("quota")) != row["payload"]["quota"] * MIB):
             failures.append("mailbox " + row["username"])
         attributes = found.get("attributes") if isinstance(found.get("attributes"), dict) else {}
@@ -87,7 +160,7 @@ def verify_account_inventory(plan: Mapping[str, Any], inventory: Mapping[str, li
     for row in plan["aliasDomains"]:
         found = next((item for item in inventory["alias-domain"] if item.get("alias_domain") == row["alias_domain"]), {})
         if (not found or found.get("target_domain") != row["target_domain"]
-                or api_number(found.get("active")) != (api_number(row["active"]) if activated else 0)):
+                or not account_activity_matches(state, "activate alias domain " + row["alias_domain"], found.get("active"), row["active"])):
             failures.append("alias domain " + row["alias_domain"])
     if native_route_conflicts(plan, inventory["alias"]):
         failures.append("separate aliases conflict with native mailbox delivery")
@@ -97,11 +170,11 @@ def verify_account_inventory(plan: Mapping[str, Any], inventory: Mapping[str, li
         found = next((item for item in inventory["alias"] if item.get("address") == row["address"]), {})
         destination = "null@localhost" if row["payload"].get("goto_null") else row["payload"].get("goto")
         if (not found or alias_destinations(found.get("goto")) != alias_destinations(destination)
-                or api_number(found.get("active")) != (row["active"] if activated else 0)):
+                or not account_activity_matches(state, "activate alias " + row["address"], found.get("active"), row["active"])):
             failures.append("alias " + row["address"])
     for row in plan["bcc"]:
         matches = [item for item in inventory["bcc"] if all(item.get(key) == row[key] for key in ("local_dest", "bcc_dest", "type"))]
-        if len(matches) != 1 or api_number(matches[0].get("active")) != (1 if activated else 0):
+        if len(matches) != 1 or not account_activity_matches(state, "activate BCC " + row["local_dest"], matches[0].get("active"), 1):
             failures.append("BCC " + row["local_dest"])
     if failures:
         raise MigrationError("Inventory mismatch: " + ", ".join(failures))
@@ -131,23 +204,28 @@ def run_accounts(configuration: Configuration, file: Path, *, apply: bool = Fals
             raise MigrationError("Account mapping is blocked:\n" + "\n".join(blockers))
         journal = account_journal(batch, configuration)
         state = journal.read()
-        if not verify and (state.get("activated") or "enable domain for activation" in state["done"]):
+        if not verify and ("activationRequests" in state or state.get("activated") or "enable domain for activation" in state["done"]):
             raise MigrationError("Account staging is forbidden after activation starts")
         operations = account_mutations(plan, recovery["emails"], reuse_domain=bool(state.get("existingDomain")))
-        validate_account_journal(state, operations)
         target = MailcowTarget(configuration.mailcow)
         api = target.api
+        inventory = account_inventory(api) if "activationRequests" in state else None
+        activation = account_activation_mutations(plan, inventory) if inventory is not None else ()
+        validate_account_journal(state, operations, activation)
+        pending = bool(state.get("pending"))
         reconcile_pending(journal, api, lambda kind, payload, password: verify_target_password(
             target, kind, payload, password, batch.directory,
         ))
         state = journal.read()
         print("Loading target domain, mailbox, alias-domain, alias and BCC inventories...")
-        inventory = account_inventory(api)
+        inventory = account_inventory(api) if inventory is None or pending else inventory
         if verify:
             if not state.get("accounts"):
                 raise MigrationError("Complete account staging for this plan before verification")
             verify_account_inventory(plan, inventory, recovery["emails"], state)
-            print("Domain, mailbox, alias, BCC and recovery inventories match the saved plan.")
+            print("Domain, mailbox, alias, BCC and recovery inventories match the saved plan and recorded activation phase.")
+            if activation and not state.get("activated"):
+                print("Activation remains incomplete; resume activate with the original plan and journals.")
             print("Password login, messages, filters, sender permissions and delivery remain outside this account verification.")
             return 0
         if native_route_conflicts(plan, inventory["alias"]):

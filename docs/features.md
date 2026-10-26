@@ -70,9 +70,13 @@ Configuration generation is available in the current development version.
   The initial defaults are weekly notifications and the Junk-folder category.
 - [x] **Preserve:** Preview and stage inactive domains, mailboxes, display names, aliases, alias domains, and supported catch-alls.
   Unknown-recipient behavior and forwarding-only accounts must have explicit target equivalents.
-  Preserve source activity in the plan; verified activation remains a separate pending workflow.
+  Preserve source activity in the plan; verified activation is a separate guarded command.
 - [x] Bind account writes to a completed saved plan, record requests before execution and reconcile uncertain outcomes without repeating writes.
   Preserve empty-domain backups, existing-object conflicts and recovery-email readback; verify staged account inventories explicitly.
+- [x] Provide guarded PostfixAdmin account activation after final mail/Sieve, sender and prefilter checks.
+  Require explicit readiness/stopped-writer confirmation, pin ordered target requests, read back each edit and reconcile uncertain
+  outcomes without repeating writes. Preserve planned inactive accounts and restore the planned domain state. Verify partial
+  activation against receipts while retaining source/target isolation; webmail completion and release remain separate.
 - [ ] **Preserve:** Transfer accepted mailbox password hashes without requiring user resets. The PostfixAdmin baseline accepts
   MD5-CRYPT only. Plesk accepts MD5-CRYPT, SHA256-CRYPT, SHA512-CRYPT, and BLF-CRYPT; available plaintext is converted to SSHA256.
   Verify target scheme support and block malformed, truncated, or unmapped credentials.
@@ -88,7 +92,7 @@ Configuration generation is available in the current development version.
 - [x] Provide guarded PostfixAdmin mail preview/apply with explicit stopped-writer confirmation and live isolation/inventory checks.
   Check all source Maildirs before copying, reuse checksum conflict checks, preserve existing files and show rsync counts/progress.
   Bind private transfer receipts to source/target identity, clear prior final-pass eligibility before each applied attempt,
-  and record a final pass only after copying and renewed checks. Sieve is a separate step; quota recalculation and activation remain pending.
+  and record a final pass only after copying and renewed checks. Sieve and activation are separate steps; quota recalculation remains pending.
 - [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
   Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
 - [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
@@ -133,7 +137,7 @@ Configuration generation is available in the current development version.
 - [x] Implement guarded activation and verification of staged forwarding/vacation prefilters internally.
   Require final mail/Sieve receipts and matching source fingerprints, retain exact target IDs and journal each activity edit.
   Reconcile only confirmed outcomes, reject conflicts and preserve completed native handoffs without enabling duplicate rules.
-  Account-activation command integration and isolation enforcement by the caller remain pending.
+  The account-activation command supplies the shared lock and live source/target isolation checks.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
   Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available.
@@ -191,7 +195,8 @@ Configuration generation is available in the current development version.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
   Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
   Check protocol controls, sessions, SOGo guards, delivery holds, sync jobs and detected scheduled/open-file writers.
-  Restoration is implemented but requires completed activation and webmail import; those workflows are still pending.
+  Restoration is implemented but requires completed activation and webmail import; full webmail import integration remains pending.
+  Read-only target isolation checks remain available during and after account activation.
 - [ ] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
   and require operator delivery/client checks including received-message authentication results.
 - [ ] **Configure:** Offer confirmed certificate setup, DKIM generation, relay assignment, and per-domain source forwarding.
@@ -214,7 +219,8 @@ Configuration generation is available in the current development version.
   Editable-filter imports retain source identity, native backups and pending preference receipts; unrelated drift blocks resumption.
   Native vacation/forwarding imports retain per-user snapshots and stop on pending writes until explicit reconciliation.
   Prefilter activation shares staging identity/receipts and verifies uncertain activity edits without repeating them blindly.
-  Full source isolation, activation and other workflow journals remain pending.
+  Account activation retains pinned requests, ordered receipts and verification of partially restored activity.
+  Full source isolation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from .accounts import account_journal, require_before_activation
 from .configuration import Configuration
@@ -65,6 +65,26 @@ def validate_sender_journal(state: Mapping[str, Any], requests: Sequence[Mapping
     return saved
 
 
+def sender_journal(context: TransferContext, requests: list) -> OperationJournal:
+    return OperationJournal(Workspace(context.batch.directory), "senders.json",
+                            {**context.identity, "kind": "mailcow-sender-permissions", "requested": requests})
+
+
+def verify_senders(context: TransferContext, target: MailcowTarget, inventory: Optional[Mapping[str, list]] = None) -> bool:
+    requests = selected_sender_requests(context.batch)
+    journal = sender_journal(context, requests)
+    state = journal.read()
+    validate_sender_journal(state, requests)
+    if not requests and not journal.workspace.path(journal.relative_path).exists():
+        return False
+    if state.get("pending") or state.get("complete") is not True:
+        raise MigrationError("Sender permission staging is incomplete or uncertain; reconcile it before verification")
+    mailboxes = inventory["mailbox"] if inventory is not None else target.api.inventory("mailbox")
+    aliases = inventory["alias"] if inventory is not None else target.api.inventory("alias")
+    verify_sender_requests(state["requests"], mailboxes, aliases)
+    return True
+
+
 def run_senders(configuration: Configuration, file: Path, *, apply: bool = False, check: bool = False) -> int:
     require_mailcow_host()
     if apply and check:
@@ -73,23 +93,17 @@ def run_senders(configuration: Configuration, file: Path, *, apply: bool = False
         batch = load_saved_plan(file, configuration)
         if not check:
             require_before_activation(account_journal(batch, configuration).read())
-        requests = selected_sender_requests(batch)
         context = TransferContext(batch, configuration)
-        journal = OperationJournal(Workspace(batch.directory), "senders.json",
-                                   {**context.identity, "kind": "mailcow-sender-permissions", "requested": requests})
-        state = journal.read()
-        previous = validate_sender_journal(state, requests)
         target = MailcowTarget(configuration.mailcow)
         api = target.api
         if check:
-            if not requests and not journal.workspace.path(journal.relative_path).exists():
-                print("No explicit sender-permission mappings require verification.")
-                return 0
-            if state.get("pending") or state.get("complete") is not True:
-                raise MigrationError("Sender permission staging is incomplete or uncertain; reconcile it before verification")
-            verify_sender_requests(state["requests"], api.inventory("mailbox"), api.inventory("alias"))
-            print("Requested sender permissions and preserved grants passed live verification.")
+            print("Requested sender permissions and preserved grants passed live verification." if verify_senders(context, target)
+                  else "No explicit sender-permission mappings require verification.")
             return 0
+        requests = selected_sender_requests(batch)
+        journal = sender_journal(context, requests)
+        state = journal.read()
+        validate_sender_journal(state, requests)
         if apply:
             journal.save({**state, "complete": False})
             print("Private sender-permission journal: {}.".format(journal.workspace.path(journal.relative_path)))
