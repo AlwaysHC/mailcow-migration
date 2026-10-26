@@ -103,6 +103,8 @@ def parser() -> argparse.ArgumentParser:
                                  help="Defaults to read-only preview")
             command.add_argument("--apply", action="store_true",
                                  help="Required for pause/release; release requires completed activation and webmail import")
+            command.add_argument("--webmail-repair", action="store_true",
+                                 help="Use a separate pause/restore journal for incomplete webmail import after prior target restoration")
         if name == "source-logins":
             command.add_argument("--action", choices=("preview", "freeze", "check", "release"), default="preview",
                                  help="Defaults to read-only preview; check verifies a completed login freeze")
@@ -151,7 +153,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command == "quota":
             return run_quota(configuration, options.plan, apply=options.apply, writers_stopped=options.writers_stopped)
         elif options.command == "target-isolation":
-            return run_target_isolation(configuration, options.plan, action=options.action, apply=options.apply)
+            return run_target_isolation(configuration, options.plan, action=options.action, apply=options.apply,
+                                        webmail_repair=options.webmail_repair)
         elif options.command == "source-logins":
             return run_source_logins(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "source-delivery":

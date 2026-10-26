@@ -18,7 +18,7 @@ from .sources.delivery import SourceDelivery
 from .sources.logins import SourceLogins
 from .sources.roundcube import roundcube_sessions
 from .targets.account_inventory import account_inventory
-from .targets.isolation import TargetIsolation
+from .targets.isolation import TargetIsolation, active_target_isolation
 from .targets.mailcow import MailcowTarget
 from .targets.storage import MailStorage
 
@@ -109,7 +109,7 @@ class TransferContext:
         self.check_holds(target)
 
     def target_holds(self, target: MailcowTarget) -> TargetIsolation:
-        isolation = TargetIsolation(target, self.batch)
+        isolation = active_target_isolation(target, self.batch)
         paused = isolation.state()
         if paused.get("paused") is not True or paused.get("released") or paused.get("pending") or paused.get("routePending"):
             raise MigrationError("Complete target-isolation pause before migration work; retain and resume any pending operation")

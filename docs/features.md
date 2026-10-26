@@ -179,7 +179,10 @@ Configuration generation is available in the current development version.
 - [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.
   Preserve exact session ownership/value checks, draft confirmation, zero-session readback and unchanged user-data snapshots.
   Retain separate receipts and evidence; Plesk preview is available, while its revocation adapter remains pending.
-- [ ] Support separately journaled target isolation for missing webmail imports on an already activated batch.
+- [x] Support separately journaled target isolation for missing webmail imports on an already activated batch.
+  Require completed prior target restoration for the same plan and target; preserve its journal and save current access/job settings.
+  Reuse owned guards and the existing pause/restore checks. Select the repair journal for import readiness and restoration,
+  retaining full webmail/quota completion gates and refusing to restart completed imports or released isolation.
 
 ## Server preparation and handoff
 

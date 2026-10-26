@@ -26,7 +26,7 @@ This snapshot has not been validated end to end.
 | `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
 | `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
 | `verify` | Read back staged domain, mailbox, alias, BCC and recovery settings against the saved account plan. |
-| `target-isolation` | Preview, pause and check Mailcow access, delivery and writers for a staged batch; retain guarded restoration state. |
+| `target-isolation` | Preview, pause, check and restore Mailcow access/delivery; support separately journaled webmail repair after activation. |
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
@@ -892,12 +892,31 @@ Configuration changes are recorded before atomic replacement while retaining exi
 are reconciled only when the live file and effective route still match the saved before/after values. Shared Postfix snapshots
 are retained separately. Changed or unowned configuration blocks continuation. Keep the journal and backups with the batch.
 
-`--action release --apply` restores saved access, delivery and sync-job settings only after the matching account journal records
-completed activation and the webmail journal records completed import. The activation and webmail-import workflows are still
-pending in this pre-alpha, so a normally staged batch cannot yet pass the release guard. A pause therefore leaves the batch
-isolated until those workflows are available and completed; this command is not a complete pause/cutover/restore workflow.
-Initial isolation refuses activation in progress, a released batch or an interrupted release. Repairing webmail on an already
-activated batch and full source isolation remain separate planned work. Isolation never copies mail or activates accounts.
+`--action release --apply` restores saved access, delivery and sync-job settings only after matching receipts confirm completed
+activation, quota recalculation and the full webmail import. Initial isolation refuses activation in progress, a released batch
+or an interrupted release. Isolation never copies mail or activates accounts; full source isolation and handoff remain pending.
+
+### Target isolation for unfinished webmail import
+
+For an activated batch with a missing or incomplete webmail import, preview a separate isolation phase:
+
+```bash
+mailcow-migrate target-isolation --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --webmail-repair
+```
+
+This requires completed target restoration recorded in the original journal for the same plan and target, with no pending
+operation. Completed webmail imports cannot be restarted. The private `webmail-target-isolation.json` journal saves current
+protocol controls, sync-job activity and configuration independently, retaining the original restoration record. Existing guard
+files can be reused only when their content matches the intended guard or the original journal's recorded final content.
+
+Add `--action pause --apply` to establish isolation; retain `--webmail-repair` when resuming that pause. The same delivery,
+webmail, session and writer checks apply. Once the repair journal exists, `--action check`, `--action release --apply` and
+import readiness checks select it automatically. An incomplete pause, interrupted release or released repair journal cannot
+fall back to the original journal to authorize further import work.
+
+With source isolation and all import prerequisites still verified, resume the PostfixAdmin `webmail` command. Completed native
+stages retain subsequent user edits. After full webmail and quota completion, release restores the settings saved before this
+repair phase. Source controls remain separate; this target mode does not implement the pending Plesk import workflow.
 
 ## Package layout
 

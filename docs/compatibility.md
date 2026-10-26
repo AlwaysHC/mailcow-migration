@@ -64,6 +64,11 @@ Pause/release additionally need API writes and writable Postfix/nginx configurat
 `transport_maps`, Dovecot replication and non-loopback published SOGo ports block the supported isolation path.
 nginx must load `/etc/nginx/conf.d/site.*.custom`; HTTPS checks retain certificate verification and refuse redirects.
 Restoration remains gated on completed activation, quota recalculation and verified webmail import.
+`--webmail-repair` additionally requires completed account activation and the original isolation journal recording completed
+restoration for the same plan and target, without pending operations. It retains that journal, saves current settings in a
+separate repair journal and reuses guard files only when their content matches the intended guard or prior recorded final content.
+Readiness and restoration select an existing repair journal without falling back to the original. Source isolation and webmail
+import prerequisites still apply independently; this target mode does not enable Plesk import.
 
 ## Initial compatibility matrix
 

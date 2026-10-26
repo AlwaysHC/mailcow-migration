@@ -19,7 +19,7 @@ from .webmail_state import WebmailJournal
 from ..core.commands import CommandResult
 from ..core.errors import MigrationError
 from ..core.state import require_identity
-from ..core.storage import decode_json, json_fingerprint, read_json, read_text, write_atomic_text, write_private_json
+from ..core.storage import decode_json, json_fingerprint, local_path, read_json, read_text, write_atomic_text, write_private_json
 from ..plans.saved import SavedPlan
 from ..resources import read_resource
 
@@ -45,15 +45,25 @@ def valid_switch(value: Any) -> bool:
 class TargetIsolation:
     target: MailcowTarget
     batch: SavedPlan
+    webmail_repair: bool = False
 
     @property
     def file(self) -> Path:
-        return self.batch.directory / "target-isolation.json"
+        return local_path(self.batch.directory / ("webmail-target-isolation.json" if self.webmail_repair else "target-isolation.json"))
 
     @property
     def identity(self) -> Mapping[str, Any]:
         return {"version": 1, "kind": "mailcow-target-isolation", "plan": self.batch.fingerprint,
-                "api": self.target.settings.api, "mailcow_directory": self.target.settings.directory}
+                "api": self.target.settings.api, "mailcow_directory": self.target.settings.directory,
+                **({"purpose": "webmail-repair"} if self.webmail_repair else {})}
+
+    def previous_isolation(self) -> Optional[Mapping[str, Any]]:
+        if not self.webmail_repair:
+            return None
+        previous = TargetIsolation(self.target, self.batch).state()
+        if previous.get("released") is not True or previous.get("pending") or previous.get("routePending"):
+            raise MigrationError("Webmail repair requires completed target access restoration for the same plan; retain the initial journal")
+        return previous
 
     @property
     def usernames(self) -> Tuple[str, ...]:
@@ -82,6 +92,7 @@ class TargetIsolation:
         }
 
     def state(self) -> Mapping[str, Any]:
+        self.previous_isolation()
         state = read_json(self.file, private=True) if self.file.exists() else {"identity": self.identity, "users": {}, "jobs": {}, "files": {}}
         if not isinstance(state, dict) or not isinstance(state.get("identity"), dict):
             raise MigrationError("Invalid target isolation journal: {}".format(self.file))
@@ -168,7 +179,10 @@ class TargetIsolation:
         if known and current not in (known["before"], known["after"]):
             raise MigrationError("Configuration changed outside migration: {}".format(name))
         if not known and current is not None and current != text:
-            raise MigrationError("Unowned configuration: {}".format(name))
+            previous = self.previous_isolation()
+            owned = (previous["files"].get(str(name)) or {}).get("after") if previous is not None else None
+            if current != owned:
+                raise MigrationError("Unowned configuration: {}".format(name))
         return current
 
     def record_file(self, name: Path, text: str) -> None:
@@ -378,3 +392,8 @@ class TargetIsolation:
                 raise MigrationError("Restored Mailcow sync job did not verify: " + identifier)
         self.update(pending=None, released=True)
         print("Mailcow access, delivery and saved sync-job states restored; source logins remain unchanged.")
+
+
+def active_target_isolation(target: MailcowTarget, batch: SavedPlan, *, webmail_repair: bool = False) -> TargetIsolation:
+    repair = TargetIsolation(target, batch, webmail_repair=True)
+    return repair if webmail_repair or repair.file.exists() else TargetIsolation(target, batch)
