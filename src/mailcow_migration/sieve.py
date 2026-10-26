@@ -8,10 +8,10 @@ from .configuration import Configuration
 from .core.commands import run_command
 from .core.errors import MigrationError
 from .core.state import Workspace
-from .core.storage import local_path, private_directory, read_json
-from .plans.evidence import load_export
+from .core.storage import local_path, private_directory
+from .plans.evidence import load_plan_export
 from .plans.native_settings import mailbox_sieve
-from .plans.saved import load_saved_plan, validate_plan_inventory
+from .plans.saved import load_saved_plan
 from .plans.sieve_evidence import load_sieve_evidence, sieve_inventory_blockers
 from .targets.mailcow import MailcowTarget
 from .targets.sieve import SieveScript, read_sieve_file, sieve_scripts
@@ -42,12 +42,7 @@ class SieveTransfer(TransferContext):
             print("Sieve transfer journal: {}. This attempt invalidates any earlier Sieve completion.".format(self.file))
         directory = local_path(self.batch.directory / "sieve-transfer")
         try:
-            evidence = load_export(self.configuration, self.batch.plan["domain"], exported)
-            manifest = read_json(self.batch.directory / "manifest.json", private=True)
-            if (not isinstance(manifest, dict) or evidence.manifest["export_id"] != manifest.get("export_id")
-                    or evidence.source.connection != self.batch.source):
-                raise MigrationError("Use the completed export selected by this saved plan; retain its original evidence")
-            validate_plan_inventory(self.batch.plan, evidence.source.inventory)
+            evidence = load_plan_export(self.configuration, self.batch, exported)
             source = load_sieve_evidence(self.batch.plan, evidence)
             blockers = sieve_inventory_blockers(source)
             for row in self.batch.plan["mailboxes"]:

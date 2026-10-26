@@ -9,6 +9,7 @@ SOGo target preparation can check/configure custom identity support, inspect exi
 An explicit user-preparation action can refresh missing SOGo user sources and reconcile cached unknown-user lookups.
 Append-only mail copying is available for staged PostfixAdmin batches with isolation checks and explicit stopped-writer confirmation.
 Guarded personal/default Sieve installation and compilation are available separately.
+Reviewed forwarding/vacation prefilters can be staged inactive with API readback and uncertain-request reconciliation.
 Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -28,6 +29,7 @@ This snapshot has not been validated end to end.
 | `sogo-target` | Prepare identity settings/user lookups, check effective settings, and inspect native data/folder-state conflicts. |
 | `mail` | Preview or append Maildir files under isolation, preserving existing files and recording applied/final passes. |
 | `sieve` | Preview or install exported personal/default filters, with explicit conflict replacement, backups and target compilation. |
+| `prefilters` | Preview or stage inactive forwarding/vacation prefilters from the reviewed webmail plan. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -274,6 +276,34 @@ aliases, alias domains, BCC and recovery emails with the saved plan. It does not
 sender permissions or delivery. Message copying is available separately; full source isolation, activation and full migration recovery remain pending;
 these commands provide the account-staging step, not a complete migration workflow. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
+
+## Forwarding/vacation prefilter staging
+
+After account staging, preview the inactive Mailcow prefilters from the saved webmail plan:
+
+```bash
+mailcow-migrate prefilters --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --export /root/mailcow-in-progress/exports/example.org/EXPORT_ID
+```
+
+The command reloads the planning export and saved policy, then reproduces the webmail proposal using its original assessment
+time. An elapsed vacation window does not silently change a previously reviewed staging plan. Changed proposals, unsupported
+data and unresolved forwarding/vacation decisions block staging. Completed account receipts and matching inactive target
+accounts are required; activation or an uncertain account write stops the operation.
+
+Add `--apply` to create missing prefilters with `active: 0`. A unique, exactly matching inactive filter is retained without
+another write. Different script contents, duplicate descriptions or any active prefilter for a selected mailbox block the
+operation. Unrelated inactive filters are retained. All selected filters are checked before the first API mutation.
+
+The private `prefilters.json` journal binds the plan, source/target, policy choices, frozen planning time, forwarding mappings
+and Sieve evidence fingerprint. Each API request is recorded before sending it. A later run reads Mailcow to reconcile an
+uncertain request; it does not blindly repeat it. Missing, ambiguous or mismatched outcomes remain pending. Preview performs
+no filter API writes, but it can update local receipts for an earlier request confirmed on the target.
+
+Completion requires exact script/metadata readback, inactive status and distinct target IDs for every selected prefilter.
+The source-script fingerprint uses the same calculation as Sieve installation so later activation can compare their evidence.
+This step currently supports PostfixAdmin and does not enable filters, modify existing filter contents, import native SOGo
+settings or authorize account activation. Prefilter staging is available before source/target isolation because it only adds
+disabled entries; mail/Sieve transfers still require their stopped-writer confirmation.
 
 ## Mail copying
 
@@ -663,6 +693,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
 | `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |
 | `sieve`, `targets.sieve` | Exported filter selection, conflict backups, guarded installation/removal and native compilation. |
+| `prefilters` | Inactive forwarding/vacation filter staging, target conflict checks and API request reconciliation. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

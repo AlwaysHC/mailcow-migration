@@ -21,9 +21,13 @@ from .targets.mailcow import MailcowTarget
 from .targets.storage import MailStorage
 
 
-def require_transfer_host(writers_stopped: bool) -> None:
+def require_mailcow_host() -> None:
     if sys.platform != "linux" or os.geteuid() != 0:
-        raise ConfigurationError("Run transfer commands on the Linux Mailcow host as root")
+        raise ConfigurationError("Run this migration operation on the Linux Mailcow host as root")
+
+
+def require_transfer_host(writers_stopped: bool) -> None:
+    require_mailcow_host()
     if not writers_stopped:
         raise ConfigurationError("Use --writers-stopped only after stopping batch writers, submission and account administration on both servers")
 
@@ -72,10 +76,7 @@ class TransferContext:
             raise MigrationError("Mail volume or vmail ownership changed since transfer started; retain the journal")
         return binding
 
-    def check_isolation(self, target: MailcowTarget) -> None:
-        findings = self.batch.blocking_findings
-        if findings:
-            raise MigrationError("Resolve saved planning findings before transfer:\n" + findings)
+    def check_accounts(self, target: MailcowTarget) -> None:
         state = account_journal(self.batch, self.configuration).read()
         require_before_activation(state)
         if state.get("accounts") is not True:
@@ -83,6 +84,12 @@ class TransferContext:
         recovery = recovery_plan(self.batch.plan)["emails"]
         validate_account_journal(state, account_mutations(self.batch.plan, recovery, reuse_domain=bool(state.get("existingDomain"))))
         verify_account_inventory(self.batch.plan, account_inventory(target.api), recovery, state)
+
+    def check_isolation(self, target: MailcowTarget) -> None:
+        findings = self.batch.blocking_findings
+        if findings:
+            raise MigrationError("Resolve saved planning findings before transfer:\n" + findings)
+        self.check_accounts(target)
         isolation = TargetIsolation(target, self.batch)
         paused = isolation.state()
         if paused.get("paused") is not True or paused.get("released") or paused.get("pending") or paused.get("routePending"):

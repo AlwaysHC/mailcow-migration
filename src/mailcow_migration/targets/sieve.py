@@ -26,6 +26,31 @@ def read_sieve_file(path: Path, root: Path) -> Optional[bytes]:
 
 
 @dataclass(frozen=True)
+class SieveSource:
+    files: Mapping[str, Path]
+    scripts: Mapping[str, Optional[bytes]] = field(repr=False)
+    default_file: Path
+    default_content: Optional[bytes] = field(repr=False)
+
+    @classmethod
+    def read(cls, plan: Mapping[str, Any], evidence: ExportEvidence) -> "SieveSource":
+        files = {row["username"]: evidence.data / "sieve" / plan["domain"] / row["payload"]["local_part"] / ".dovecot.sieve"
+                 for row in plan["mailboxes"]}
+        default = evidence.data / "config/default.sieve"
+        return cls(files, {name: read_sieve_file(path, evidence.data) for name, path in files.items()},
+                   default, read_sieve_file(default, evidence.data))
+
+    def fingerprint(self) -> str:
+        try:
+            return json_fingerprint({
+                "scripts": {name: content.decode("utf-8") if content is not None else None for name, content in self.scripts.items()},
+                "defaultSieve": self.default_content.decode("utf-8") if self.default_content is not None else None,
+            }, canonical=True)
+        except UnicodeError as error:
+            raise MigrationError("Exported Sieve must contain valid UTF-8; retain the original files") from error
+
+
+@dataclass(frozen=True)
 class SieveScript:
     username: str
     source: Path
@@ -51,16 +76,13 @@ def sieve_scripts(
     root = local_path(storage.root / "sieve")
     if not root.is_dir():
         raise MigrationError("Expected the existing Mailcow Sieve directory: " + str(root))
-    default = evidence.data / "config/default.sieve"
-    default_content = read_sieve_file(default, evidence.data)
-    scripts, personal = [], {}
+    source = SieveSource.read(plan, evidence)
+    scripts = []
     for row in plan["mailboxes"]:
         username = row["username"]
-        path = evidence.data / "sieve" / plan["domain"] / row["payload"]["local_part"] / ".dovecot.sieve"
-        content = read_sieve_file(path, evidence.data)
-        personal[username] = content
+        path, content = source.files[username], source.scripts[username]
         if use_default and content is None:
-            path, content = default, default_content
+            path, content = source.default_file, source.default_content
             if content is None:
                 raise MigrationError("Exported default Sieve is missing")
         target, binary = root / (username + ".sieve"), root / (username + ".svbin")
@@ -68,11 +90,4 @@ def sieve_scripts(
         if script.conflict and not replace:
             raise MigrationError(username + ": existing Sieve differs; preview with --replace-sieve to back up and reconcile it")
         scripts.append(script)
-    try:
-        fingerprint = json_fingerprint({
-            "scripts": {name: content.decode("utf-8") if content is not None else None for name, content in personal.items()},
-            "defaultSieve": default_content.decode("utf-8") if default_content is not None else None,
-        }, canonical=True)
-    except UnicodeError as error:
-        raise MigrationError("Exported Sieve must contain valid UTF-8; retain the original files") from error
-    return tuple(scripts), fingerprint
+    return tuple(scripts), source.fingerprint()

@@ -112,6 +112,10 @@ Configuration generation is available in the current development version.
   date windows, interval semantics, and local-copy/filter ordering. Timezone and zero-interval policies must be explicit.
   Source mapping and assessment are implemented, including whole-day timezone checks for inactive and expired records.
   Target timezone agreement, import and verification remain pending. Prior autoresponder reply history is not transferred.
+- [x] Stage reviewed PostfixAdmin forwarding/vacation prefilters inactive before activation.
+  Reproduce the saved proposal at its original planning time, retain exact matching inactive filters, block conflicting or active
+  filters, and record API intent before writes. Reconcile uncertain results without repeating requests and verify inactive readback.
+  Preserve Sieve evidence fingerprints and forwarding identity; filter activation and native SOGo handoff remain pending.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
   Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available.
@@ -187,6 +191,7 @@ Configuration generation is available in the current development version.
   Source delivery retains operation stages, source configuration backups and recipient-isolation evidence; delivery release remains pending.
   Mail copying retains pending/final-pass receipts and resumes through fresh checks and append-only copying.
   Sieve installation shares transfer identity/isolation checks and retains pending stages, export fingerprints and conflict backups.
+  Inactive prefilter staging retains source/policy identity and reconciles uncertain API outcomes against live target data.
   Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.

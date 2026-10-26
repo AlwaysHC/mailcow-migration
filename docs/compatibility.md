@@ -14,6 +14,7 @@ Explicit SOGo user preparation can reload missing domain user sources and reconc
 The native SOGo import backend is implemented internally, with no import command yet.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
+Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
 Integrated webmail imports, full source isolation, native SOGo filter/settings integration, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -129,6 +130,11 @@ per-host configuration, or external address books require explicit handling befo
 
 The target must provide an HTTPS Mailcow API, a usable API key with the required read/write access, local configuration
 and mail-volume access, and Docker Compose v2. Verify `MAILDIR_SUB=Maildir`, vmail ownership, and the actual Docker mounts.
+
+`prefilters` requires `get/filters/all` and, when applying, `add/filter`, plus the account inventories used for staging checks.
+Filter rows must expose their username, type, description, exact script, activity and a usable ID. The command creates only
+inactive prefilters and requires the saved PostfixAdmin export/policy/webmail proposal. It does not require a stopped-writer
+flag because it does not enable filters or change mail services. Native SOGo settings and guarded activation remain separate.
 
 `sogo-target` requires the running `sogo-mailcow` container, its `sogo` user, `sogo-tool`, `plutil`, and a readable regular
 `data/conf/sogo/sogo.conf` without symlinked paths. Applying custom identity support also needs writable host configuration,

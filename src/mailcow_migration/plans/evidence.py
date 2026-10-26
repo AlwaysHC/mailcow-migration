@@ -9,6 +9,7 @@ from ..exporting import export_file_manifest
 from ..sources import SourceKind, configured_sources
 from ..sources.export import validate_plesk_snapshot, validate_postfixadmin_export
 from ..sources.inventory import DomainInventory, SourceInspection
+from .saved import SavedPlan, validate_plan_inventory
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,7 @@ class ExportEvidence:
 
     def verify(self) -> None:
         if read_json(self.directory / "manifest.json", private=True) != self.manifest:
-            raise MigrationError("Export manifest changed while planning")
+            raise MigrationError("Export manifest changed during this operation")
         if export_file_manifest(self.data, secure=False) != self.manifest["files"]:
             raise MigrationError("Export files differ from their completion manifest; retain the export and investigate")
 
@@ -79,4 +80,14 @@ def load_export(configuration: Configuration, domain: str, directory: Path) -> E
         snapshot = read_json(evidence.data / "source.json", private=True)
         if list(validate_plesk_snapshot(snapshot, evidence.source, domain)) != manifest["source_reported_blockers"]:
             raise MigrationError("Plesk source blockers differ from the completion manifest")
+    return evidence
+
+
+def load_plan_export(configuration: Configuration, batch: SavedPlan, directory: Path) -> ExportEvidence:
+    evidence = load_export(configuration, batch.plan["domain"], directory)
+    manifest = read_json(batch.directory / "manifest.json", private=True)
+    if (not isinstance(manifest, dict) or evidence.manifest["export_id"] != manifest.get("export_id")
+            or evidence.source.connection != batch.source):
+        raise MigrationError("Use the completed export selected by this saved plan; retain its original evidence")
+    validate_plan_inventory(batch.plan, evidence.source.inventory)
     return evidence
