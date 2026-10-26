@@ -18,6 +18,7 @@ Guarded append-only mail copying is available for PostfixAdmin batches with expl
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
 Explicit sender-permission staging and read-only verification are also available.
+Domain administrator preview/import/check supports reviewed PostfixAdmin mappings and preserves existing target memberships/security.
 Plesk import/isolation, full source isolation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
@@ -133,6 +134,12 @@ per-host configuration, or external address books require explicit handling befo
 
 The target must provide an HTTPS Mailcow API, a usable API key with the required read/write access, local configuration
 and mail-volume access, and Docker Compose v2. Verify `MAILDIR_SUB=Maildir`, vmail ownership, and the actual Docker mounts.
+
+`admins` requires `get/domain-admin/all`, with `username`, `active` and string-list `selected_domains`. Applying after activation
+uses `add/domain-admin` or explicitly approved `edit/domain-admin` merges. Merges require observable `force_tfa`/`force_pw_update`
+attributes and exact readback without losing existing domains. New credentials are kept in private batch files; existing
+administrator passwords are retained. Uncertain creations use the existing `php-fpm-mailcow` native password verifier before
+their journal can advance. Global administrator privileges and Plesk panel users are excluded from this operation.
 
 `senders` requires mailbox/alias inventories exposing `sender_acl`, alias `sender_allowed`/destinations, and mailbox activity.
 Applying a merge requires `edit/mailbox` and an observable security-attributes dictionary; current `force_tfa` and

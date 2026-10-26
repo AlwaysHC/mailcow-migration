@@ -6,6 +6,7 @@ from typing import Optional, Sequence
 
 from . import __version__
 from .accounts import run_accounts
+from .admins import run_admins
 from .activation import run_activation
 from .configuration import load_configuration
 from .core.errors import MigrationError
@@ -54,6 +55,7 @@ def parser() -> argparse.ArgumentParser:
         ("sieve", "Preview or install exported personal/default Sieve with explicit replacement, backups and compilation"),
         ("prefilters", "Preview or stage inactive forwarding/vacation prefilters from the saved webmail plan"),
         ("senders", "Preview, merge or verify explicitly reviewed sender permissions while preserving existing grants"),
+        ("admins", "Preview, import or verify reviewed domain administrators while preserving existing memberships and security"),
     ):
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE", help="JSON configuration file")
@@ -67,7 +69,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
         if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery",
-                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "activate", "quota", "webmail"):
+                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "admins", "activate", "quota", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
@@ -78,6 +80,10 @@ def parser() -> argparse.ArgumentParser:
             action.add_argument("--apply", action="store_true", help="Merge explicit grants into staged inactive mailboxes")
             action.add_argument("--check", action="store_true",
                                 help="Read-only verification of completed sender permissions, including after activation")
+        if name == "admins":
+            action = command.add_mutually_exclusive_group()
+            action.add_argument("--apply", action="store_true", help="Import domain administrators after account activation")
+            action.add_argument("--check", action="store_true", help="Verify completed grants without changing memberships or passwords")
         if name in ("mail", "sieve", "activate", "quota", "webmail"):
             command.add_argument("--apply", action="store_true", help="Apply the selected operation and journal its result")
             command.add_argument("--writers-stopped", action="store_true",
@@ -163,6 +169,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             return run_prefilters(load_configuration(options.config), options.plan, options.export, apply=options.apply)
         elif options.command == "senders":
             return run_senders(load_configuration(options.config), options.plan, apply=options.apply, check=options.check)
+        elif options.command == "admins":
+            return run_admins(load_configuration(options.config), options.plan, apply=options.apply, check=options.check)
         else:
             load_configuration(options.config)
             print("Configuration is valid. Credential files and server connectivity have not been checked.")

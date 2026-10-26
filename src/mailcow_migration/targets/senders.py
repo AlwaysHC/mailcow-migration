@@ -26,7 +26,7 @@ def sender_allowed(mailbox: Mapping[str, Any], aliases: Sequence[Mapping[str, An
 def security_flags(mailbox: Mapping[str, Any]) -> Mapping[str, Any]:
     attributes = mailbox.get("attributes")
     if not isinstance(attributes, dict):
-        raise MigrationError(mailbox["username"] + ": cannot preserve mailbox security attributes")
+        raise MigrationError(mailbox["username"] + ": cannot preserve account security attributes")
     flags = {}
     for key in SECURITY_FIELDS:
         value = attributes.get(key)

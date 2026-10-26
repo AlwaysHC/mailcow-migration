@@ -69,13 +69,9 @@ def sender_requests(plan: Mapping[str, Any], policy: Mapping[str, Any]) -> list:
     return permissions
 
 
-def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mapping[str, Any]) -> Mapping[str, Any]:
-    forwarding = mailbox_forwardings(plan)
-    recovery = recovery_plan(plan)
-    checks, admins = [*forwarding["checks"], *recovery["checks"]], []
+def administrator_plan(plan: Mapping[str, Any], policy: Mapping[str, Any]) -> Mapping[str, Any]:
+    checks, admins = [], []
     source = plan["source"]
-    scripts = load_sieve_evidence(plan, evidence)
-    forwardings = [*forwarding["forwardings"], *scripts.forwardings]
     for row in source["admins"]:
         if active(row.get("superadmin")):
             continue
@@ -104,6 +100,17 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
             row["username"], username)))
     if len({row["username"].lower() for row in admins}) != len(admins):
         raise MigrationError("Administrator name mappings collide; choose distinct names in adminNames")
+    return {"checks": checks, "admins": admins}
+
+
+def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mapping[str, Any]) -> Mapping[str, Any]:
+    forwarding = mailbox_forwardings(plan)
+    recovery = recovery_plan(plan)
+    administrators = administrator_plan(plan, policy)
+    checks = [*forwarding["checks"], *recovery["checks"], *administrators["checks"]]
+    admins, source = administrators["admins"], plan["source"]
+    scripts = load_sieve_evidence(plan, evidence)
+    forwardings = [*forwarding["forwardings"], *scripts.forwardings]
     checks.append(check("fetchmail", "blocked" if source["fetchmail"] else "not-needed",
                         "Fetchmail jobs, including disabled jobs, require a supported native mapping" if source["fetchmail"]
                         else "No fetchmail jobs to migrate"))

@@ -100,8 +100,11 @@ Configuration generation is available in the current development version.
   recalculations under fresh isolation checks. Bind completion to transfer evidence and require it before webmail import or target release.
 - [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
   Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
-- [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
+- [x] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
   Review global administrators separately; Plesk panel users are outside this mail-domain migration.
+  Preview the saved proposal, require explicit rename/merge ownership decisions, preserve existing memberships/security,
+  generate private new credentials and reconcile uncertain writes before retrying. Read back imported grants; webmail import
+  requires completed administrator receipts. Global administrator application remains part of the separate shared-server work.
 - [ ] **Configure:** Preserve supported send-as grants and BCC rules without widening existing target permissions or scope.
 - [x] Apply explicit sender-permission mappings to staged inactive mailboxes and verify them through the target API.
   Recognize existing direct/wildcard/alias coverage, retain old ACL entries and password-change/two-factor requirements,

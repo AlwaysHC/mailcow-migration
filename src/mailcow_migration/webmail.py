@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Mapping
 
+from .admins import verify_admins
 from .configuration import Configuration
 from .core.errors import MigrationError
 from .core.state import Workspace
@@ -69,6 +70,7 @@ def run_webmail(
             inventory = context.check_accounts(target, activated=True)
             QuotaJournal(batch, configuration.mailcow).require_complete(target)
             verify_senders(context, target, inventory)
+            verify_admins(context, target)
             context.check_holds(target)
 
         def check_source() -> None:
