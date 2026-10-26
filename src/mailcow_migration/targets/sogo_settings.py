@@ -17,7 +17,7 @@ from ..plans.roundcube_values import MISSING, source_truth
 from ..plans.saved import SavedPlan
 from ..plans.saved_webmail import SavedWebmail, load_saved_webmail
 from ..plans.sieve import requires_forwarding_prefilter
-from ..prefilters import prefilter_staging, validate_prefilter_journal
+from ..prefilters import prefilter_activations, prefilter_staging, validate_prefilter_journal
 from ..transfers import TransferContext, require_mailcow_host
 
 
@@ -98,9 +98,9 @@ class SogoSettingsImport:
         if not journal.workspace.path(journal.relative_path).exists():
             return {}
         state = journal.read()
-        validate_prefilter_journal(state, operations)
         if state.get("pending") or state.get("complete") is not True:
             raise MigrationError("Complete forwarding/vacation prefilter staging before native settings import")
+        validate_prefilter_journal(state, operations, prefilter_activations(reviewed, state))
         return {row["username"]: row for row in state["filters"]}
 
     def inspect(

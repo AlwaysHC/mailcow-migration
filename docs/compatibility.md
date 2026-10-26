@@ -14,6 +14,7 @@ Explicit SOGo user preparation can reload missing domain user sources and reconc
 The native SOGo import backend is implemented internally, with no import command yet.
 The editable-filter backend also implements native preference and stored/active script readback, pending workflow integration.
 Native vacation/forwarding import and timezone/prefilter verification are implemented internally with the same integration limitation.
+Guarded prefilter activation is also internal; account-activation command integration remains pending.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
@@ -144,6 +145,11 @@ and can verify completed permission staging after activation. This does not cert
 Filter rows must expose their username, type, description, exact script, activity and a usable ID. The command creates only
 inactive prefilters and requires the saved PostfixAdmin export/policy/webmail proposal. It does not require a stopped-writer
 flag because it does not enable filters or change mail services. Native SOGo settings and guarded activation remain separate.
+
+The internal prefilter activation backend uses the same inventories plus `edit/filter` activity updates, retaining IDs recorded
+at staging. It requires final mail/Sieve receipts and matching evidence fingerprints. It honors verified native SOGo handoffs,
+blocks uncertain native writes, and reconciles uncertain activation requests through exact target readback. It has no CLI command;
+the caller must enforce account-activation order, stopped writers and source/target isolation while holding the shared lock.
 
 `sogo-target` requires the running `sogo-mailcow` container, its `sogo` user, `sogo-tool`, `plutil`, and a readable regular
 `data/conf/sogo/sogo.conf` without symlinked paths. Applying custom identity support also needs writable host configuration,

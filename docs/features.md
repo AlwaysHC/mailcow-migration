@@ -129,7 +129,11 @@ Configuration generation is available in the current development version.
 - [x] Stage reviewed PostfixAdmin forwarding/vacation prefilters inactive before activation.
   Reproduce the saved proposal at its original planning time, retain exact matching inactive filters, block conflicting or active
   filters, and record API intent before writes. Reconcile uncertain results without repeating requests and verify inactive readback.
-  Preserve Sieve evidence fingerprints and forwarding identity; filter activation and native SOGo handoff remain pending.
+  Preserve Sieve evidence fingerprints and forwarding identity; activation/handoff backends are separate from workflow integration.
+- [x] Implement guarded activation and verification of staged forwarding/vacation prefilters internally.
+  Require final mail/Sieve receipts and matching source fingerprints, retain exact target IDs and journal each activity edit.
+  Reconcile only confirmed outcomes, reject conflicts and preserve completed native handoffs without enabling duplicate rules.
+  Account-activation command integration and isolation enforcement by the caller remain pending.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
   Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available.
@@ -209,6 +213,7 @@ Configuration generation is available in the current development version.
   Sender-permission staging preserves baseline ACLs and security attributes, with request reconciliation and live readback.
   Editable-filter imports retain source identity, native backups and pending preference receipts; unrelated drift blocks resumption.
   Native vacation/forwarding imports retain per-user snapshots and stop on pending writes until explicit reconciliation.
+  Prefilter activation shares staging identity/receipts and verifies uncertain activity edits without repeating them blindly.
   Full source isolation, activation and other workflow journals remain pending.
 - [ ] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.

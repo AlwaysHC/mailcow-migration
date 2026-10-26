@@ -13,6 +13,7 @@ Reviewed forwarding/vacation prefilters can be staged inactive with API readback
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
 Native editable SOGo filter import is implemented internally, with backups, conflict checks and script/preference readback.
 Native vacation/forwarding import is also implemented internally, including container timezone checks and prefilter handoff.
+Staged prefilter activation is implemented internally with copied-Sieve checks and preservation of completed native handoffs.
 Full source isolation, native SOGo filter/settings integration, activation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
@@ -337,6 +338,24 @@ The source-script fingerprint uses the same calculation as Sieve installation so
 This step currently supports PostfixAdmin and does not enable filters, modify existing filter contents, import native SOGo
 settings or authorize account activation. Prefilter staging is available before source/target isolation because it only adds
 disabled entries; mail/Sieve transfers still require their stopped-writer confirmation.
+
+### Prefilter activation backend
+
+The internal activation backend requires completed staging, final mail and Sieve receipts, and matching staged/copied Sieve
+fingerprints. It checks each saved filter ID, owner, type, script and activity, rejecting duplicate matches or other active
+prefilters for that mailbox. Forwarding uses its planned activity; staged vacation-only filters are enabled with their date guards.
+
+Activation requests share the private `prefilters.json` journal and record only an `active` edit before sending it. Each applied
+edit is read back. An uncertain request is reconciled only when the live filter still matches its saved identity and requested
+activity; otherwise it remains pending. Preview may record a confirmed earlier request, but performs no API writes. A separate
+read-only mode checks recorded activity without reconciling pending writes.
+
+Verified native SOGo settings receipts take precedence: retained forwarding prefilters keep their imported activity, while
+prefilters replaced by native settings stay disabled. An uncertain native settings write blocks activation. Native settings
+import also accepts valid earlier prefilter activation receipts, preserving the order of the eventual account/webmail workflow.
+
+This backend has no CLI command yet. Its caller must hold the workspace lock and check the account activation phase, stopped
+writers and source/target isolation before writes. Account activation, full webmail completion and release remain pending.
 
 ## Mail copying
 
@@ -777,6 +796,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |
 | `sieve`, `targets.sieve` | Exported filter selection, conflict backups, guarded installation/removal and native compilation. |
 | `prefilters` | Inactive forwarding/vacation filter staging, target conflict checks and API request reconciliation. |
+| `targets.prefilter_activation` | Internal prefilter activation/readback, copied-Sieve guards and preservation of native handoffs. |
 | `senders`, `targets.senders` | Explicit sender ACL merges, security-attribute preservation and live permission verification. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |

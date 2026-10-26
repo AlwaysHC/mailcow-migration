@@ -31,14 +31,18 @@ def matching_prefilter(
     return found
 
 
-def validate_prefilter_journal(state: Mapping[str, Any], operations: Mapping[str, Mapping[str, Any]]) -> None:
+def validate_prefilter_journal(
+    state: Mapping[str, Any], operations: Mapping[str, Mapping[str, Any]], activation: Optional[Mapping[str, Mapping[str, Any]]] = None,
+) -> None:
+    activation = activation or {}
+    requests = {**{identifier: {"endpoint": "add/filter", "payload": payload} for identifier, payload in operations.items()}, **activation}
     if (type(state.get("version")) is not int or "complete" in state and type(state["complete"]) is not bool
-            or any(identifier not in operations for identifier in state["done"])):
+            or any(identifier not in requests for identifier in state["done"])
+            or any(identifier in activation for identifier in state["done"]) and state.get("complete") is not True):
         raise MigrationError("Invalid prefilter staging journal; retain its requests and receipts")
     pending = state.get("pending")
-    if pending and (state.get("complete") is True or pending not in operations or state.get("pendingRequest") != {
-        "endpoint": "add/filter", "payload": operations.get(pending),
-    }):
+    if pending and (pending not in requests or state.get("pendingRequest") != requests[pending]
+                    or (state.get("complete") is True) != (pending in activation)):
         raise MigrationError("Pending prefilter request differs from the reviewed plan; no API write was repeated")
     if not pending and "pendingRequest" in state:
         raise MigrationError("Prefilter request has no pending operation; retain the journal for reconciliation")
@@ -61,6 +65,22 @@ def prefilter_staging(
                 "plannedAt": reviewed.proposal["checked_at"], "forwardingsHash": json_fingerprint(forwarding["forwardings"], canonical=True),
                 "evidenceHash": SieveSource.read(batch.plan, evidence).fingerprint()}
     return OperationJournal(Workspace(batch.directory), "prefilters.json", identity), operations
+
+
+def prefilter_activations(reviewed: SavedWebmail, state: Mapping[str, Any]) -> Mapping[str, Mapping[str, Any]]:
+    filters = reviewed.proposal["prefilters"]
+    identifiers = state.get("filter_ids")
+    if (not isinstance(identifiers, dict) or identifiers.keys() != {row["username"] for row in filters}
+            or any(not isinstance(value, str) or not value for value in identifiers.values())
+            or len(set(identifiers.values())) != len(identifiers)):
+        raise MigrationError("Prefilter staging lacks its verified target IDs; retain the original journal")
+    forwarders = {row["username"]: row for row in reviewed.forwarding["forwardings"]}
+    return {
+        ("activate forwarding " if row["username"] in forwarders else "activate vacation ") + row["username"]: {
+            "endpoint": "edit/filter", "payload": {"items": [identifiers[row["username"]]],
+                                                  "attr": {"active": forwarders.get(row["username"], {}).get("active", 1)}},
+        } for row in filters
+    }
 
 
 def run_prefilters(configuration: Configuration, file: Path, exported: Path, *, apply: bool = False) -> int:
