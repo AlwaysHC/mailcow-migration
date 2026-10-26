@@ -30,14 +30,14 @@ class CommandResult:
 
 def run_command(
     arguments: Sequence[str], *, input_text: Optional[str] = None, cwd: Optional[Path] = None,
-    timeout: float = 120, label: Optional[str] = None, private_output: bool = True,
+    timeout: Optional[float] = 120, label: Optional[str] = None, private_output: bool = True,
     secrets: Sequence[str] = (), allowed_codes: Sequence[int] = (0,),
     diagnostic_file: Optional[Path] = None,
     stdout_file: Optional[Path] = None, environment: Optional[Mapping[str, str]] = None,
     inherit_output: bool = False,
 ) -> CommandResult:
-    if not arguments or isinstance(arguments, (str, bytes)) or timeout <= 0:
-        raise MigrationError("A command argument sequence and positive timeout are required")
+    if not arguments or isinstance(arguments, (str, bytes)) or timeout is not None and timeout <= 0:
+        raise MigrationError("A command argument sequence and a positive timeout or None are required")
     if inherit_output and (stdout_file is not None or diagnostic_file is not None):
         raise MigrationError("Inherited command output cannot also use private output files")
     name = label or Path(arguments[0]).name

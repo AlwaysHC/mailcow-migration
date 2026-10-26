@@ -13,7 +13,7 @@ Reviewed forwarding/vacation prefilters can be staged inactive with API readback
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
 Guarded webmail import connects RoundCube data, editable SOGo filters and native vacation/forwarding settings with native readback.
 Guarded PostfixAdmin account activation includes copied-Sieve checks, staged prefilters and preservation of completed native handoffs.
-Full source isolation, quota recalculation and full cutover remain pending.
+Quota recalculation is available for activated mailboxes under isolation. Full source isolation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -35,6 +35,7 @@ This snapshot has not been validated end to end.
 | `prefilters` | Preview or stage inactive forwarding/vacation prefilters from the reviewed webmail plan. |
 | `senders` | Preview, merge or verify reviewed sender permissions, retaining existing grants and mailbox security settings. |
 | `activate` | Restore planned account/filter activity after final transfer checks, retaining source and target isolation. |
+| `quota` | Recalculate usage for planned active mailboxes after activation, bound to the copied mail volume. |
 | `webmail` | Preview or import approved RoundCube data, editable filters and native settings; retain isolation and verified completion receipts. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
@@ -309,8 +310,33 @@ without sending account edits. Keep all journals together; staging and transfers
 
 The completion marker is saved only after account, sender, filter and isolation checks succeed. Target protocol access, SOGo
 maintenance controls, sync-job pauses and delivery holds remain in place; source controls remain in place too. `verify` and
-`target-isolation --action check` can inspect this activated-but-isolated batch. Complete webmail import and its verification before
-target release. Quota recalculation, DNS/source-routing handoff and full migration completion remain pending.
+`target-isolation --action check` can inspect this activated-but-isolated batch. Recalculate quota, then complete webmail import
+and its verification before target release. DNS/source-routing handoff and full migration completion remain pending.
+
+## Quota recalculation
+
+After account activation and before webmail import, preview quota recalculation while both servers remain isolated:
+
+```bash
+mailcow-migrate quota --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --writers-stopped
+```
+
+Add `--apply` to run `doveadm quota recalc -u USER` inside `dovecot-mailcow` for each planned active mailbox. This rebuilds usage
+counters after copying mail. Disabled users are skipped and need controlled recalculation before any future activation; a
+disabled primary domain blocks the command. The PostfixAdmin activation/isolation path is required.
+
+The command checks final mail/Sieve receipts, activated account inventories, live source/target holds and the Dovecot mail volume
+against the root saved during transfer. Native output, warnings and errors remain visible; recalculation has no imposed timeout.
+Preview runs no recalculation commands and writes no quota receipt.
+
+Each applied attempt clears prior quota completion before live checks, then records the current user before its native command.
+The private `quota.json` binds progress to the plan, source/target, completed transfer fingerprint and mail volume. Completion
+requires successful command exits for every selected mailbox and renewed readiness checks; it is not an independent comparison
+of reported usage values. Failures or interruption retain incomplete/pending state. Rerunning `--apply` repeats all selected
+recalculations under fresh checks; it does not assume the interrupted command succeeded.
+
+Webmail import and target release require a completed matching quota receipt and the same live mail volume. Quota work retains
+isolation. Proceed with webmail import, then review results before explicitly releasing target access and delivery.
 
 ## Sender permissions
 
@@ -614,14 +640,14 @@ Configuration/user assessments retain `import_ready: false`; account activation 
 
 ## Webmail import
 
-After account activation, while source and target remain isolated, preview the approved PostfixAdmin webmail import:
+After account activation and quota recalculation, while source and target remain isolated, preview the approved PostfixAdmin webmail import:
 
 ```bash
 mailcow-migrate webmail --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json \
   --export /root/mailcow-in-progress/exports/example.org/EXPORT_ID --writers-stopped
 ```
 
-The command requires final mail/Sieve receipts, completed account activation, matching recovery/sender inventories, paused
+The command requires final mail/Sieve and quota receipts, completed account activation, matching recovery/sender inventories, paused
 source logins/delivery/sessions and target access/delivery controls. It reloads the approved RoundCube snapshot/proposal and
 saved webmail plan, including accepted preference deferrals. Changed inputs or unsupported mappings stop the operation.
 Prepare required SOGo configuration and user sources through `sogo-target` first; the import does not restart shared services.
@@ -641,8 +667,8 @@ handoff checks pass. A completed rerun verifies saved receipt integrity and leav
 
 Webmail completion leaves isolation paused. After reviewing the results, use `target-isolation --action release --apply` with
 the same config and plan to restore saved target access, delivery and sync jobs. Release requires this full completion receipt
-and unchanged, matching backend receipts; a missing, partial or foreign record cannot authorize it. Source isolation stays in
-place. Quota recalculation, DNS/source routing, operator client/delivery checks and full migration completion remain separate.
+and unchanged, matching backend and quota receipts; a missing, partial or foreign record cannot authorize it. Source isolation
+stays in place. DNS/source routing, operator client/delivery checks and full migration completion remain separate.
 
 ### Native import backend
 
@@ -859,6 +885,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `targets.prefilter_activation` | Internal prefilter activation/readback, copied-Sieve guards and preservation of native handoffs. |
 | `senders`, `targets.senders` | Explicit sender ACL merges, security-attribute preservation and live permission verification. |
 | `activation`, `accounts` | Ordered account activation, pinned target IDs, partial-phase inventory checks and uncertain-write reconciliation. |
+| `quota`, `targets.quota_state` | Native usage recalculation, copied-volume checks, interrupted-attempt receipts and downstream quota guards. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |

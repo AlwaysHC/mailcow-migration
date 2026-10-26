@@ -1,9 +1,10 @@
 # Feature roadmap
 
 The first release covers domain-by-domain mail migration from PostfixAdmin or Plesk to an existing Mailcow installation.
-Checked items are implemented. Unchecked items are planned work, not currently available migration capabilities.
-The current pre-alpha supports configuration, source inspection, private exports and read-only account planning.
-Inactive account staging, account inventory verification, target isolation and PostfixAdmin login/delivery controls are available as explicit operations.
+Checked items are implemented. Unchecked items are not fully covered; notes distinguish implemented parts from remaining work.
+The pre-alpha supports configuration, source inspection, private exports, planning, staging and account verification.
+PostfixAdmin isolation, mail/Sieve transfer, activation, quota recalculation and webmail import are available as explicit operations.
+Plesk execution, full handoff and end-to-end validation remain unfinished.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -89,10 +90,14 @@ Configuration generation is available in the current development version.
 - [ ] **Preserve:** Copy Maildir messages and supported metadata with append-only rsync, preserving existing target files.
   Conflicting content, unsafe links, source changes, and unaccounted writers must stop copying or activation.
   Include final verification and target quota recalculation.
+  The PostfixAdmin path includes final-pass checks and quota recalculation; Plesk copying remains blocked on its isolation adapter.
 - [x] Provide guarded PostfixAdmin mail preview/apply with explicit stopped-writer confirmation and live isolation/inventory checks.
   Check all source Maildirs before copying, reuse checksum conflict checks, preserve existing files and show rsync counts/progress.
   Bind private transfer receipts to source/target identity, clear prior final-pass eligibility before each applied attempt,
-  and record a final pass only after copying and renewed checks. Sieve and activation are separate steps; quota recalculation remains pending.
+  and record a final pass only after copying and renewed checks. Sieve, activation and quota recalculation are separate guarded steps.
+- [x] Recalculate quota for planned active mailboxes after activation on the original copied mail volume.
+  Preserve disabled-user/domain behavior, native diagnostics and command completion; journal pending users and repeat interrupted
+  recalculations under fresh isolation checks. Bind completion to transfer evidence and require it before webmail import or target release.
 - [ ] **Configure:** Import valid recovery email addresses and map password-expiration policy.
   Recovery phone/SMS data and unmapped password-expiration behavior are blockers.
 - [ ] **Configure:** Map PostfixAdmin domain administrators, privileges, usernames, ownership, and new passwords explicitly.
@@ -198,7 +203,7 @@ Configuration generation is available in the current development version.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
   Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
   Check protocol controls, sessions, SOGo guards, delivery holds, sync jobs and detected scheduled/open-file writers.
-  Restoration requires completed activation and the full webmail receipt with matching native stage receipts.
+  Restoration requires completed activation, quota recalculation and the full webmail receipt with matching native stage receipts.
   Read-only target isolation checks remain available during and after account activation.
 - [ ] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
   and require operator delivery/client checks including received-message authentication results.

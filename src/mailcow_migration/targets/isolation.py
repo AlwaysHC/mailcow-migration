@@ -12,6 +12,7 @@ from urllib.request import HTTPSHandler, build_opener
 from uuid import uuid4
 
 from .mailcow import MailcowTarget, NoRedirect
+from .quota_state import QuotaJournal
 from .storage import inspect_container, mail_volume_root
 from .writers import check_mailbox_writers
 from .webmail_state import WebmailJournal
@@ -346,6 +347,7 @@ class TargetIsolation:
         if not account_state.get("activated") or account_state.get("pending"):
             raise MigrationError("Finish activation and webmail import before releasing Mailcow")
         WebmailJournal(self.batch, self.target.settings).require_complete()
+        QuotaJournal(self.batch, self.target.settings).require_complete(self.target)
         if state.get("released"):
             return
         self.update(pending="release")

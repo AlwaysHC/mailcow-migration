@@ -13,6 +13,7 @@ SOGo configuration preparation, native user-data conflict inspection and target 
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
 The PostfixAdmin webmail command connects RoundCube import, editable filters and native vacation/forwarding settings with readback.
 Guarded PostfixAdmin account activation is available and includes staged prefilter activation under verified isolation.
+Quota recalculation follows activation for planned active mailboxes, with copied-volume and isolation checks.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
@@ -58,7 +59,7 @@ running imapsync processes. The Mailcow API must expose all seven mailbox protoc
 Pause/release additionally need API writes and writable Postfix/nginx configuration directories. Postfix service overrides of
 `transport_maps`, Dovecot replication and non-loopback published SOGo ports block the supported isolation path.
 nginx must load `/etc/nginx/conf.d/site.*.custom`; HTTPS checks retain certificate verification and refuse redirects.
-Restoration remains gated on completed activation and webmail import, whose workflows are not available in this snapshot.
+Restoration remains gated on completed activation, quota recalculation and verified webmail import.
 
 ## Initial compatibility matrix
 
@@ -155,6 +156,12 @@ remain paused. Final mail/Sieve receipts, recovery emails and sender permissions
 their ordered requests and validate activity against completed/pending receipts. The separate `verify` and target isolation check
 commands support these phases. Activation does not complete webmail import, recalculate quota or authorize isolation release.
 
+`quota` requires the activated PostfixAdmin batch, an active primary domain, completed mail/Sieve receipts and the original
+`/var/vmail` host mount. It runs `doveadm quota recalc -u USER` only for planned active users, streaming native output and retaining
+an incomplete receipt on failure/interruption. There is no command timeout. Completion requires successful native exits and
+renewed readiness checks, not independently measured usage values. Disabled users require controlled maintenance before later activation.
+Webmail import and target release require the matching quota receipt and live volume; neither repeats recalculation automatically.
+
 `sogo-target` requires the running `sogo-mailcow` container, its `sogo` user, `sogo-tool`, `plutil`, and a readable regular
 `data/conf/sogo/sogo.conf` without symlinked paths. Applying custom identity support also needs writable host configuration,
 permission to restart SOGo and `nc` in the container for its startup check. Native user inspection needs loaded SOGo user sources
@@ -183,9 +190,10 @@ been validated end to end. The `webmail` command enforces completed transfers, a
 source/target isolation. Its preview retains private backups without importing user data; native settings target checks are
 deferred until editable-filter import is complete. Preparation and shared-service restarts remain separate explicit actions.
 
-Target release requires a full `mailcow-webmail-import` receipt bound to the batch/source/target and the exact completion
-receipts from all three native stages. A component's completion flag alone is insufficient. Completed webmail reruns validate
-receipt integrity and retain later user edits; webmail import never releases access or changes DNS/source routing automatically.
+Target release requires a full `mailcow-webmail-import` receipt bound to the batch/source/target, exact completion receipts
+from all three native stages, and completed quota recalculation on the copied volume. A component's completion flag alone is
+insufficient. Completed webmail reruns validate receipt integrity and retain later user edits; webmail import never releases
+access or changes DNS/source routing automatically.
 
 | Container | Capabilities needed by planned migration workflows |
 | --- | --- |

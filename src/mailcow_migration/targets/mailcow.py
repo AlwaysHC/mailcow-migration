@@ -120,11 +120,11 @@ class MailcowTarget:
         return MailcowApi(self.settings.api, Path(self.settings.api_key_file))
 
     def compose(
-        self, arguments: Sequence[str], *, input_text: Optional[str] = None, timeout: float = 120, private_output: bool = True,
-        diagnostic_file: Optional[Path] = None, allowed_codes: Sequence[int] = (0,),
+        self, arguments: Sequence[str], *, input_text: Optional[str] = None, timeout: Optional[float] = 120, private_output: bool = True,
+        diagnostic_file: Optional[Path] = None, allowed_codes: Sequence[int] = (0,), inherit_output: bool = False,
     ) -> CommandResult:
         return run_command(
             ("docker", "compose", "--project-directory", self.settings.directory, *arguments),
             input_text=input_text, timeout=timeout, private_output=private_output, label="Mailcow Docker Compose",
-            diagnostic_file=diagnostic_file, allowed_codes=allowed_codes,
+            diagnostic_file=diagnostic_file, allowed_codes=allowed_codes, inherit_output=inherit_output,
         )

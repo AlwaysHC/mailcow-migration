@@ -15,6 +15,7 @@ from .isolation import run_target_isolation
 from .mail import run_mail
 from .planning import run_plan
 from .prefilters import run_prefilters
+from .quota import run_quota
 from .roundcube_sessions import run_roundcube_sessions
 from .senders import run_senders
 from .sogo_target import run_sogo_target
@@ -42,6 +43,7 @@ def parser() -> argparse.ArgumentParser:
         ("accounts", "Preview or stage inactive accounts from a completed saved plan"),
         ("verify", "Verify account inventory against the saved plan and recorded activation phase"),
         ("activate", "Restore planned account activity under verified isolation after final mail, Sieve and filter checks"),
+        ("quota", "Preview or recalculate quota for planned active mailboxes after activation, retaining isolation"),
         ("webmail", "Preview or import approved RoundCube data, editable filters and native settings while retaining isolation"),
         ("target-isolation", "Preview, pause or check batch access and writers on Mailcow; retain guarded restoration state"),
         ("source-logins", "Preview, freeze, check or release PostfixAdmin batch logins while preserving other query exclusions"),
@@ -65,7 +67,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
         if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery",
-                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "activate", "webmail"):
+                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "activate", "quota", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
@@ -76,7 +78,7 @@ def parser() -> argparse.ArgumentParser:
             action.add_argument("--apply", action="store_true", help="Merge explicit grants into staged inactive mailboxes")
             action.add_argument("--check", action="store_true",
                                 help="Read-only verification of completed sender permissions, including after activation")
-        if name in ("mail", "sieve", "activate", "webmail"):
+        if name in ("mail", "sieve", "activate", "quota", "webmail"):
             command.add_argument("--apply", action="store_true", help="Apply the selected operation and journal its result")
             command.add_argument("--writers-stopped", action="store_true",
                                  help="Confirm batch writers, submission and account administration are stopped on both servers")
@@ -137,6 +139,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command == "webmail":
             return run_webmail(load_configuration(options.config), options.plan, options.export, apply=options.apply,
                                writers_stopped=options.writers_stopped)
+        elif options.command == "quota":
+            return run_quota(load_configuration(options.config), options.plan, apply=options.apply, writers_stopped=options.writers_stopped)
         elif options.command == "target-isolation":
             return run_target_isolation(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
         elif options.command == "source-logins":

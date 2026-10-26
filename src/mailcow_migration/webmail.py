@@ -14,6 +14,7 @@ from .sources import SourceKind
 from .sources.roundcube import roundcube_sessions
 from .targets.mailcow import MailcowTarget
 from .targets.prefilter_activation import activate_prefilters
+from .targets.quota_state import QuotaJournal
 from .targets.sogo import SogoTarget
 from .targets.sogo_filters import SogoFilterImport
 from .targets.sogo_import import SogoImport
@@ -66,6 +67,7 @@ def run_webmail(
         def verify_ready() -> None:
             context.final_state()
             inventory = context.check_accounts(target, activated=True)
+            QuotaJournal(batch, configuration.mailcow).require_complete(target)
             verify_senders(context, target, inventory)
             context.check_holds(target)
 

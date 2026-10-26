@@ -108,12 +108,15 @@ class TransferContext:
         self.check_accounts(target)
         self.check_holds(target)
 
-    def check_holds(self, target: MailcowTarget) -> None:
+    def target_holds(self, target: MailcowTarget) -> TargetIsolation:
         isolation = TargetIsolation(target, self.batch)
         paused = isolation.state()
         if paused.get("paused") is not True or paused.get("released") or paused.get("pending") or paused.get("routePending"):
-            raise MigrationError("Complete target-isolation pause before transfer; retain and resume any pending operation")
-        isolation.check()
+            raise MigrationError("Complete target-isolation pause before migration work; retain and resume any pending operation")
+        return isolation
+
+    def check_holds(self, target: MailcowTarget) -> None:
+        self.target_holds(target).check()
         if self.batch.plan["mailboxes"]:
             SourceLogins(self.batch).check()
         SourceDelivery(self.batch, self.configuration.mailcow.api).check()
