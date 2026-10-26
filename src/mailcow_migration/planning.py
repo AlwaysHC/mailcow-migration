@@ -12,6 +12,7 @@ from .core.state import Workspace
 from .core.storage import json_fingerprint, local_path, private_directory, read_json, write_private_json, write_private_text
 from .inspection import require_inspection_host
 from .plans.assessment import check
+from .plans.catalog import known_batches, register_batch, require_batch_ownership
 from .plans.domain import MIB, QUOTA_LIMIT, active, build_plan, number
 from .plans.evidence import ExportEvidence, load_export
 from .plans.plesk import plesk_plan
@@ -117,6 +118,7 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
         raise ConfigurationError("Plan output exists; choose a new --out directory")
     workspace = Workspace()
     with workspace.lock():
+        require_batch_ownership(known_batches(workspace, domain), destination)
         print("Validating completed export and source identity...")
         evidence = load_export(configuration, domain, export_directory)
         policy = load_policy(configuration.migration.policy_file)
@@ -130,6 +132,7 @@ def run_plan(configuration: Configuration, domain: str, exported: Path, output: 
                       "source": asdict(evidence.source.connection), "configuration": configuration.document(),
                       "started_at": datetime.now(timezone.utc).isoformat()}
         write_private_json(destination / "manifest.json", provenance)
+        register_batch(destination, workspace)
         try:
             checks = [check("source-mapping", "blocked", item) for item in plan["blockers"]]
             quota_mode = "fixed" if fixed_quota is not None else "pending-source-blockers" if plan["blockers"] else "measured"

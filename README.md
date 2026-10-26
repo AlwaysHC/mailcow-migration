@@ -3,6 +3,7 @@
 A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to an existing Mailcow installation.
 
 **Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
+Source selection checks saved batch ownership and can recognize recorded Mailcow addresses after activation and DNS handoff.
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
 SOGo target preparation can check/configure custom identity support, inspect existing user-data conflicts and assess target folder display state.
@@ -22,6 +23,7 @@ This snapshot has not been validated end to end.
 | `configure` | Interactive setup for one or both sources and the Mailcow target. |
 | `check-config` | Local configuration validation. |
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
+| `select-source` | Select the source using live evidence and saved journals; recognize recorded target addresses after activation. |
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
 | `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
 | `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
@@ -120,6 +122,44 @@ never overwritten. Mail services are not changed. This is current-source inspect
 recognize a previously activated Mailcow target, validate resume, inspect target readiness, or produce a migration plan.
 DNS already pointing at Mailcow may therefore produce a finding. A successful inspection is not migration approval.
 
+## Source selection and batch discovery
+
+Run on the Linux Mailcow host as root before continuing a migration:
+
+```bash
+mailcow-migrate select-source example.org --config migration.json
+```
+
+Selection checks only configured sources and reuses the inventory, Maildir, authoritative MX/address and alias-domain checks.
+It also discovers plans under `/root/mailcow-in-progress/plans/DOMAIN/` and paths recorded in the private `batch-catalog.json`.
+Planning registers its output directory before target assessment; commands loading a saved plan register it under the same
+shared operation lock. Existing batches outside the discovery tree must be supplied once with `--plan /absolute/path/plan.json`.
+Keep all existing batches available; directories outside the tree and catalog cannot be discovered automatically.
+
+The catalog binds each path to its domain and saved configuration. Selection reports incomplete planning and operation journals,
+then uses the original plan when exactly one batch has operations. Changed configuration, missing registered files, unsupported
+state versions, changed plan fingerprints, competing journals or a different source stop continuation. Released journals remain
+ownership evidence. New planning and saved-plan commands also reject another batch's operation journals for that primary domain.
+Resolve conflicts while retaining the original records; no journals are converted, removed or treated as permission to overwrite data.
+
+After activation completes and **before changing DNS**, record the Mailcow addresses used for subsequent source selection:
+
+```bash
+mailcow-migrate select-source example.org --config migration.json \
+  --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --record-target-addresses
+```
+
+This reads the running target Postfix hostname and its authoritative A/AAAA records. The private `source-selection-target.json`
+binds those addresses to the plan, source, API and Mailcow directory. Recording requires completed activation without a pending
+account request; repeat recording verifies the first snapshot rather than replacing changed addresses. It changes no mail service.
+After DNS changes, selection accepts those saved addresses only with matching activation evidence, applies the same rule to
+mail aliases, and still rejects addresses belonging to another configured source. Source configuration and Maildirs must still agree.
+Missing or foreign address evidence cannot authorize guessing a source after cutover.
+
+Selection writes private evidence to `/root/mailcow-in-progress/source-detection/DOMAIN.json`. It preserves the batch's settings
+and policy files and directs the operator back to the original plan. Selection does not execute pending writes or establish
+transfer readiness; target address recording does not certify TLS, SMTP delivery or completion of handoff.
+
 ## Source export
 
 After updating the installed package, run on the Linux Mailcow host:
@@ -128,9 +168,11 @@ After updating the installed package, run on the Linux Mailcow host:
 mailcow-migrate export example.org --config migration.json
 ```
 
-Export repeats live inspection, requires one matching configured source with no inspection findings, and holds the shared
-operation lock. It automatically creates `/root/mailcow-in-progress/exports/DOMAIN/EXPORT_ID/` using the domain and a generated
-unique export ID, and prints the location. Existing exports are retained. It saves the inspection report and source connection identity before
+Export repeats journal-aware source selection, requires one matching configured source with no findings, and holds the shared
+operation lock. Existing batches must match their saved configuration and source inventory. Export is blocked after activation
+starts or during an uncertain account write. It automatically creates `/root/mailcow-in-progress/exports/DOMAIN/EXPORT_ID/`
+using the domain and a generated unique export ID, and prints the location. Existing exports are retained.
+It saves the inspection report and source connection identity before
 collecting account/configuration data, then rechecks the selected source domain and Maildir inventory before completion.
 
 | Source | Preserved export evidence |
@@ -148,7 +190,7 @@ export layout; Plesk data is stored in `data/source.json`. The manifest records 
 blockers, and file sizes/SHA-256 hashes relative to `data`. The manifest starts with `complete: false` and is replaced
 atomically with `complete: true` only after validation and the inventory recheck. A missing manifest or a false completion
 flag means the export is incomplete. Interrupted/failed exports are retained; rerunning the command creates a new export automatically.
-This command does not resume or alter migration batches.
+This command does not resume pending migration operations; it can register an existing batch in the shared catalog.
 
 Local directories use mode 700 and files use mode 600. Exports contain passwords or password hashes and server credentials;
 the PostfixAdmin dump includes the whole set of configuration tables to preserve cross-domain dependencies. Completed command

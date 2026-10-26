@@ -23,6 +23,7 @@ from .sogo_target import run_sogo_target
 from .sieve import run_sieve
 from .source_delivery import run_source_delivery
 from .source_logins import run_source_logins
+from .source_selection import run_source_selection
 from .webmail import run_webmail
 from .wizard import configure
 
@@ -39,6 +40,7 @@ def parser() -> argparse.ArgumentParser:
         ("configure", "Generate configuration interactively on the Linux Mailcow host"),
         ("check-config", "Validate a configuration file locally without contacting servers"),
         ("inspect", "Inspect source domain configuration, Maildirs and authoritative DNS without changing mail services"),
+        ("select-source", "Select a source using DNS, saved batch identity and operation journals, including DNS handoff resume"),
         ("export", "Export private source configuration and account data without changing mail services"),
         ("plan", "Plan accounts and quotas from a completed export and inspect Mailcow without changing mail services"),
         ("accounts", "Preview or stage inactive accounts from a completed saved plan"),
@@ -60,10 +62,14 @@ def parser() -> argparse.ArgumentParser:
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE",
                              help="JSON configuration file; create one with mailcow-migrate configure --config FILE")
-        if name in ("inspect", "export", "plan"):
+        if name in ("inspect", "select-source", "export", "plan"):
             command.add_argument("domain", metavar="DOMAIN", help="Lowercase primary mail domain")
         if name == "inspect":
             command.add_argument("--output", type=Path, metavar="FILE", help="Save a private JSON report to a new file")
+        if name == "select-source":
+            command.add_argument("--plan", type=Path, metavar="FILE", help="Original saved plan, including older batches outside the discovery tree")
+            command.add_argument("--record-target-addresses", action="store_true",
+                                 help="After activation, save Mailcow addresses before changing DNS; requires --plan and root on the Mailcow host")
         if name in ("plan", "sieve", "prefilters", "activate", "webmail"):
             command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
         if name == "plan":
@@ -137,6 +143,8 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         configuration = load_configuration(options.config)
         if options.command == "inspect":
             return run_inspection(configuration, options.domain, options.output)
+        elif options.command == "select-source":
+            return run_source_selection(configuration, options.domain, plan=options.plan, record_target=options.record_target_addresses)
         elif options.command == "export":
             return run_export(configuration, options.domain)
         elif options.command == "plan":

@@ -37,14 +37,19 @@ class InspectionReport:
         }
 
 
-def matches_source(source: SourceInspection, others: Tuple[SourceInspection, ...], mx: MxEvidence) -> bool:
+def matches_source(
+    source: SourceInspection, others: Tuple[SourceInspection, ...], mx: MxEvidence, target: Tuple[str, ...] = (),
+) -> bool:
     return (
-        any(all(address in source.ips for address in record.ips) for record in mx.records)
+        any(all(address in (*source.ips, *target) for address in record.ips) for record in mx.records)
         and all(address not in other.ips for address in mx.ips for other in others)
     )
 
 
-def inspect_domain(configuration: Configuration, domain: str, tell: Callable[[str], None] = print) -> InspectionReport:
+def inspect_domain(
+    configuration: Configuration, domain: str, tell: Callable[[str], None] = print, *,
+    target_addresses: Optional[Mapping[str, Tuple[str, ...]]] = None,
+) -> InspectionReport:
     domain_name(domain)
     sources = []
     for connection in configured_sources(configuration):
@@ -63,7 +68,10 @@ def inspect_domain(configuration: Configuration, domain: str, tell: Callable[[st
     tell("MX destinations: " + "; ".join(
         "{} {} ({})".format(record.priority, record.exchange, ", ".join(record.ips)) for record in mx.records
     ))
-    matches = tuple(source for source in sources if matches_source(source, tuple(other for other in sources if other is not source), mx))
+    targets = target_addresses or {}
+    matches = tuple(source for source in sources if matches_source(
+        source, tuple(other for other in sources if other is not source), mx, targets.get(source.connection.kind.value, ()),
+    ))
     findings = []
     aliases = []
     if len(matches) != 1:
@@ -83,8 +91,8 @@ def inspect_domain(configuration: Configuration, domain: str, tell: Callable[[st
             tell("Checking mail alias {}...".format(alias))
             evidence = source_mx(alias)
             aliases.append(evidence)
-            if not matches_source(source, others, evidence):
-                findings.append("Mail alias {} does not route to the same {} source.".format(alias, label))
+            if not matches_source(source, others, evidence, targets.get(source.connection.kind.value, ())):
+                findings.append("Mail alias {} does not route to the same {} source or its recorded activated target.".format(alias, label))
     return InspectionReport(
         domain, datetime.now(timezone.utc).isoformat(), tuple(sources), mx, tuple(aliases),
         tuple(source.connection.kind.value for source in matches), tuple(findings),

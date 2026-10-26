@@ -7,11 +7,13 @@ from typing import Any, Iterator, Mapping
 from uuid import uuid4
 
 from .configuration import Configuration, section_label
+from .accounts import account_journal, require_before_activation
 from .core.domain import domain_name
 from .core.errors import MigrationError
 from .core.state import Workspace
 from .core.storage import private_directory, write_private_json
-from .inspection import inspect_domain, require_inspection_host
+from .inspection import require_inspection_host
+from .source_selection import select_domain_source
 from .sources import SourceKind
 from .sources.export import plesk_export, postfixadmin_export, postfixadmin_locations, validate_postfixadmin_export
 from .sources.inventory import inspect_source
@@ -56,9 +58,9 @@ def run_export(configuration: Configuration, domain: str) -> int:
     require_inspection_host()
     workspace = Workspace()
     with workspace.lock():
-        report = inspect_domain(configuration, domain)
-        if report.findings:
-            raise MigrationError("Source inspection must agree before exporting:\n" + "\n".join(report.findings))
+        report, batch = select_domain_source(configuration, domain, workspace)
+        if batch is not None:
+            require_before_activation(account_journal(batch, configuration).read())
         source = next(source for source in report.sources if source.connection.kind.value == report.matching_sources[0])
         postfixadmin = source.connection.kind is SourceKind.POSTFIXADMIN
         if postfixadmin:

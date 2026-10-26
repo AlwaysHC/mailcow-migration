@@ -45,17 +45,19 @@ Configuration generation is available in the current development version.
   Preserve source account/alias/password mapping, source blockers, configured quarantine defaults, measured quotas,
   account policy decisions, initial target readiness/conflicts and empty-domain reuse checks. Save a private review and provenance.
   Full migration assessment remains pending and is explicitly distinguished from successful account planning.
-- [ ] Extend inspection into migration source selection with saved connection settings, cutover-resume detection and
-  cross-source operation-journal checks. Current-source inspection is not a resume or readiness check.
+- [x] Extend inspection into migration source selection with saved connection settings, cutover-resume detection and
+  cross-source operation-journal checks. `select-source` retains the original batch/configuration and checks all configured sources;
+  private target-address evidence permits DNS resume only with matching activation identity. `inspect` remains current-source inspection.
 - [ ] **Preserve:** Provide guided server preparation, domain migration, source prerequisite checks and SOGo capability checks.
   Add account provisioning, mail transfer, Sieve/SOGo settings, full assessment, administrator and sender-permission import,
   verification, activation and quota recalculation.
 - [ ] **Preserve:** Export source account/configuration inventories and record source identity without changing mail service.
   Inspect both schema and effective configuration; keep exports private.
   Domain source exports and separate RoundCube snapshots are implemented; shared-server export and full schema/configuration assessment remain pending.
-- [ ] **Preserve:** Select PostfixAdmin or Plesk using the existing live configuration, Maildir, and DNS evidence.
+- [x] **Preserve:** Select PostfixAdmin or Plesk using the existing live configuration, Maildir, and DNS evidence.
   Inspect only configured sources. Preserve saved connection settings, cutover-resume detection, and ambiguity checks.
-  The inventory and current DNS checks are implemented by `inspect`; journal-aware selection remains pending.
+  Shared selection checks primary and alias-domain routing, recorded activated target addresses and competing batch journals.
+  Export uses the same selection and refuses refresh after activation starts or during uncertain account writes.
 - [x] **Preserve:** Plan a primary domain with its mail aliases, including domains containing aliases but no mailboxes.
   Reject ambiguous ownership, chained/overlapping domain mappings, and incompatible mailbox paths.
 - [x] **Configure:** Measure stored mail and calculate mailbox/domain capacity with explicit quota headroom and minimums.
@@ -240,9 +242,12 @@ Configuration generation is available in the current development version.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
 - [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.
   Further generalization beyond the configuration wizard and independent source selection is future work.
-- [ ] **Preserve:** Detect unfinished batches and coordinate locking across preparation and migration operations.
+- [x] **Preserve:** Detect unfinished batches and coordinate locking across preparation and migration operations.
   Validate saved settings, state versions and fingerprints before resuming.
-  Any necessary format conversion must preserve operation ownership and recovery evidence before resuming mutations.
+  Discover the domain's workspace planning tree and register all newly planned or explicitly loaded batch paths in a private catalog.
+  Show incomplete planning, retain released-operation ownership and reject competing journals before new planning or saved-plan operations.
+  Older batches outside the discovery tree require an explicit original plan. Unsupported formats stop without conversion;
+  any future conversion must preserve operation ownership and recovery evidence before resuming mutations.
 - [ ] **Preserve:** Keep terminal prompts/progress useful, errors visible, and logs free of passwords, API keys, and message content.
   Package every required runtime resource inside this project.
 

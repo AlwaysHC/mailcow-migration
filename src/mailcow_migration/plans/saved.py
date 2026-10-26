@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .domain import active, valid_domain
+from .catalog import register_batch
 from ..configuration import Configuration
 from ..core.errors import MigrationError
 from ..core.storage import json_fingerprint, local_path, read_json
@@ -90,4 +91,5 @@ def load_saved_plan(file: Path, configuration: Configuration) -> SavedPlan:
             or any(not isinstance(row, dict) or any(not isinstance(row.get(key), str) for key in ("id", "status", "detail"))
                    for row in assessment["checks"])):
         raise MigrationError("Missing or inconsistent saved planning assessment")
+    register_batch(path.parent)
     return SavedPlan(path.parent, plan, assessment, fingerprint, sources[0])
