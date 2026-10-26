@@ -11,15 +11,13 @@ Target isolation and PostfixAdmin login and delivery controls are available sepa
 RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
 SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
-The native SOGo import backend is implemented internally, with no import command yet.
-The editable-filter backend also implements native preference and stored/active script readback, pending workflow integration.
-Native vacation/forwarding import and timezone/prefilter verification are implemented internally with the same integration limitation.
+The PostfixAdmin webmail command connects RoundCube import, editable filters and native vacation/forwarding settings with readback.
 Guarded PostfixAdmin account activation is available and includes staged prefilter activation under verified isolation.
 Guarded append-only mail copying is available for PostfixAdmin batches with explicit stopped-writer confirmation.
 Personal/default Sieve installation and compilation are available for PostfixAdmin batches under the same transfer guards.
 Inactive forwarding/vacation prefilter staging is available separately, with exact API readback and uncertain-request reconciliation.
 Explicit sender-permission staging and read-only verification are also available.
-Integrated webmail imports, full source isolation, native SOGo command integration and full recovery remain planned work.
+Plesk import/isolation, full source isolation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
@@ -178,11 +176,16 @@ source folder must already exist on the target. SOGo backups must contain a user
 `Mail` entry when present. `ExpandedFolders`, when present, must be an array or JSON-encoded array of supported account/folder
 identifiers with the expected primary-account selection. Folder checks establish display-state compatibility only.
 
-The internal import backend uses `sogo-tool user-preferences set` with a private JSON file for defaults/settings, and additive
+The native import backend uses `sogo-tool user-preferences set` with a private JSON file for defaults/settings, and additive
 `sogo-tool restore -f` for address-book records. It requires the same native backup/conversion capabilities as inspection.
 Temporary files run as the `sogo` user with owner-only permissions; failures retain them for recovery. This backend has not
-been validated end to end and is not called by the current CLI. Its private native-completion receipt does not authorize
-access restoration; completed transfer/activation and full isolation/workflow integration remain required.
+been validated end to end. The `webmail` command enforces completed transfers, activation, approved source proposals and live
+source/target isolation. Its preview retains private backups without importing user data; native settings target checks are
+deferred until editable-filter import is complete. Preparation and shared-service restarts remain separate explicit actions.
+
+Target release requires a full `mailcow-webmail-import` receipt bound to the batch/source/target and the exact completion
+receipts from all three native stages. A component's completion flag alone is insufficient. Completed webmail reruns validate
+receipt integrity and retain later user edits; webmail import never releases access or changes DNS/source routing automatically.
 
 | Container | Capabilities needed by planned migration workflows |
 | --- | --- |
@@ -220,15 +223,15 @@ The internal editable SOGo filter backend requires the same active Sieve path, p
 `doveadm -f json sieve get` returning one record with a string `sieve script` field. SOGo must expose configured user sources,
 editable-filter support and the enabled capabilities needed by the converted rules. Its native backups must contain two
 preference dictionaries. `sogo-tool restore -p` must accept XML property lists and retain unrelated defaults/settings.
-The backend verifies both stored and active script contents and preserves private pending receipts on failure. It has no CLI
-entry point yet; a caller must enforce completed transfer, activation and isolation prerequisites with stopped writers.
+The backend verifies both stored and active script contents and preserves private pending receipts on failure. The `webmail`
+command supplies completed transfer, activation and isolation checks with stopped writers.
 
 The native vacation/forwarding backend additionally requires `date -d @SECONDS "+%F %T"` in both SOGo and Dovecot containers,
 with results matching the policy timezone at each vacation boundary. Native preference imports require readable
 `/etc/sogo/sieve.creds` for the SOGo user and support for `sogo-tool user-preferences set ... -p /etc/sogo/sieve.creds -F` when
 generating delivery scripts. Active vacations must generate the expected inclusive `currentdate` date guards. Prefilter handoff
 uses `get/filters/all` and `edit/filter` only for a matching staged filter; readback verifies its ID, owner, type, body, label and
-activity. Pending settings writes require reconciliation before another attempt. This backend also has no CLI entry point yet.
+activity. Pending settings writes require reconciliation before another attempt. This is the final stage of `webmail --apply`.
 
 | Location | Commands or facilities |
 | --- | --- |

@@ -14,6 +14,7 @@ from uuid import uuid4
 from .mailcow import MailcowTarget, NoRedirect
 from .storage import inspect_container, mail_volume_root
 from .writers import check_mailbox_writers
+from .webmail_state import WebmailJournal
 from ..core.commands import CommandResult
 from ..core.errors import MigrationError
 from ..core.state import require_identity
@@ -344,9 +345,7 @@ class TargetIsolation:
         state = self.state()
         if not account_state.get("activated") or account_state.get("pending"):
             raise MigrationError("Finish activation and webmail import before releasing Mailcow")
-        webmail = read_json(self.batch.directory / "roundcube/state.json", private=True)
-        if not isinstance(webmail, dict) or webmail.get("complete") is not True:
-            raise MigrationError("Finish webmail import before releasing Mailcow")
+        WebmailJournal(self.batch, self.target.settings).require_complete()
         if state.get("released"):
             return
         self.update(pending="release")

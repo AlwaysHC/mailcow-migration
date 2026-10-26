@@ -4,7 +4,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from .accounts import account_journal, account_mutations, require_before_activation, validate_account_journal, verify_account_inventory
+from .accounts import (
+    account_activation_mutations, account_journal, account_mutations, require_before_activation, validate_account_journal, verify_account_inventory,
+)
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import require_identity
@@ -70,20 +72,34 @@ class TransferContext:
         write_private_json(self.file, following, replace=True)
         return following
 
+    def final_state(self) -> Mapping[str, Any]:
+        state = self.state()
+        if state["mailPending"] or not state["finalMail"] or state["sievePending"] or not state["sieve"]:
+            raise MigrationError("Complete the final mail and Sieve passes before activation or webmail import")
+        return state
+
     def storage_binding(self, state: Mapping[str, Any], storage: MailStorage) -> Mapping[str, Any]:
         binding = {"containerRoot": str(storage.root), "uid": storage.uid, "gid": storage.gid}
         if any(key in state and state[key] != value for key, value in binding.items()):
             raise MigrationError("Mail volume or vmail ownership changed since transfer started; retain the journal")
         return binding
 
-    def check_accounts(self, target: MailcowTarget) -> None:
+    def check_accounts(self, target: MailcowTarget, *, activated: bool = False) -> Mapping[str, list]:
         state = account_journal(self.batch, self.configuration).read()
-        require_before_activation(state)
+        if activated:
+            if state.get("activated") is not True or state.get("pending"):
+                raise MigrationError("Complete account activation before webmail import; reconcile any pending request")
+        else:
+            require_before_activation(state)
         if state.get("accounts") is not True:
             raise MigrationError("Complete account staging for this plan before transfer")
         recovery = recovery_plan(self.batch.plan)["emails"]
-        validate_account_journal(state, account_mutations(self.batch.plan, recovery, reuse_domain=bool(state.get("existingDomain"))))
-        verify_account_inventory(self.batch.plan, account_inventory(target.api), recovery, state)
+        inventory = account_inventory(target.api)
+        operations = account_mutations(self.batch.plan, recovery, reuse_domain=bool(state.get("existingDomain")))
+        activation = account_activation_mutations(self.batch.plan, inventory) if activated else ()
+        validate_account_journal(state, operations, activation)
+        verify_account_inventory(self.batch.plan, inventory, recovery, state)
+        return inventory
 
     def check_isolation(self, target: MailcowTarget) -> None:
         findings = self.batch.blocking_findings

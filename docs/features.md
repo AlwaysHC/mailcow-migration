@@ -50,7 +50,7 @@ Configuration generation is available in the current development version.
   verification, activation and quota recalculation.
 - [ ] **Preserve:** Export source account/configuration inventories and record source identity without changing mail service.
   Inspect both schema and effective configuration; keep exports private.
-  Domain source exports are implemented; shared-server export, full schema/configuration assessment and webmail export remain pending.
+  Domain source exports and separate RoundCube snapshots are implemented; shared-server export and full schema/configuration assessment remain pending.
 - [ ] **Preserve:** Select PostfixAdmin or Plesk using the existing live configuration, Maildir, and DNS evidence.
   Inspect only configured sources. Preserve saved connection settings, cutover-resume detection, and ambiguity checks.
   The inventory and current DNS checks are implemented by `inspect`; journal-aware selection remains pending.
@@ -62,7 +62,7 @@ Configuration generation is available in the current development version.
   source/target identity, and operator decisions. Preview must not modify either mail service.
   Account, source webmail, shared source settings and sender-policy assessments are implemented.
   Mail storage, rsync capabilities and read-only append previews are implemented.
-  Guarded PostfixAdmin mail execution is available separately. Integrated webmail verification, shared-setting application and cutover/resume remain pending.
+  Guarded PostfixAdmin mail execution and webmail verification are available separately. Shared-setting application and full cutover/resume remain pending.
 
 ## Accounts and messages
 
@@ -110,21 +110,21 @@ Configuration generation is available in the current development version.
 - [x] Provide guarded PostfixAdmin Sieve preview/apply using the planning export and shared transfer isolation/journal checks.
   Preserve personal/default selection, inactive/unsupported-script blockers, full-batch inspection, regular-file/ancestor checks,
   private conflict backups, vmail ownership and native compilation. Clear earlier Sieve completion before each applied attempt.
-  Plesk installation, editable SOGo integration and full activation verification remain pending.
+  Editable SOGo integration is available through webmail import; Plesk installation and end-to-end validation remain pending.
 - [x] **Preserve:** Convert the supported PostfixAdmin Sieve subset into planned editable SOGo filters.
   Save personal/default scripts, converted rules, blockers, native preferences and staging prefilters in a private webmail plan.
   Keep Plesk personal Sieve and forwarding scripts on their copy/compile path without imposing editable-filter conversion.
-- [ ] **Preserve:** Import and verify editable SOGo filters against target preferences and active scripts.
+- [x] **Preserve:** Import and verify supported PostfixAdmin editable SOGo filters against target preferences and active scripts.
   The internal backend implements capability/conflict checks, native preference restoration and stored/active script readback.
-  Command integration and enforcing transfer/activation/isolation prerequisites remain pending.
+  The webmail command enforces transfer/activation/isolation prerequisites before this stage.
 - [x] Implement the native PostfixAdmin editable-filter import backend with private backups and per-user pending receipts.
   Require matching active/stored scripts, preserve unrelated defaults/settings, block enabled native vacation/forward/notification
   conflicts, and verify converted preferences before activating the stored script. Reconcile interrupted work through fresh reads;
   retain later user edits after completion. Full webmail completion and native vacation/forwarding handoff remain separate.
-- [ ] **Configure:** Convert PostfixAdmin vacations and forwarding into supported SOGo/Sieve settings, preserving enabled state,
+- [x] **Configure:** Convert PostfixAdmin vacations and forwarding into supported SOGo/Sieve settings, preserving enabled state,
   date windows, interval semantics, and local-copy/filter ordering. Timezone and zero-interval policies must be explicit.
   Source mapping and assessment are implemented, including whole-day timezone checks for inactive and expired records.
-  Target timezone agreement, import and verification are implemented internally; CLI/workflow integration remains pending.
+  Target timezone agreement, import and verification are connected through the PostfixAdmin webmail command.
   Prior autoresponder reply history is not transferred.
 - [x] Implement the native SOGo vacation/forwarding backend using the reviewed webmail proposal and completed filter import.
   Check both containers' vacation timezones, existing preferences and active/stored scripts; retain prefilter forwarding when
@@ -141,15 +141,15 @@ Configuration generation is available in the current development version.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
   Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available.
-  Native import/readback is implemented internally; command integration and migration prerequisites remain pending.
+  PostfixAdmin import/readback and migration prerequisites are connected; the Plesk isolation/activation path remains pending.
 - [x] Map supported RoundCube vCards, collected recipients, identities, preferences and source folder display state into reviewable private proposals.
   Preserve stable record IDs, existing UIDs, defaults, unsupported-data blockers and source snapshot/folder drift checks.
   Record review of an unchanged proposal and explicit deferral of supported receipt/reply-folder preferences before source isolation.
-  Target configuration/conflict checks and folder-state assessment are available separately; import command integration remains pending.
+  Target preparation remains separate; webmail import reuses the approved proposal and native conflict/folder checks.
 - [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
   Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
   Target configuration preview/application for custom identity support is implemented, with explicit shared-restart scope,
-  private backups, pending-operation checks and effective-setting readback. Full native-filter target integration remains pending.
+  private backups, pending-operation checks and effective-setting readback. Webmail import enforces the required native-filter capabilities.
 - [x] Inspect existing SOGo preferences and destination address books through native backups without changing user data.
   Preserve exact conflict/ownership checks and the first private backup; missing user sources and failed lookups block inspection.
   Native inspection does not authorize writes, refresh sources, clear cached user records or mark import complete.
@@ -162,8 +162,11 @@ Configuration generation is available in the current development version.
   Save proposed values privately; the internal write/readback layer is separate from inspection and full import completion.
 - [x] Implement the native SOGo import backend for approved preferences, contacts and folder display state.
   Preserve all-user conflict checks, private first backups, pending-write receipts, additive 50-contact chunks and native readback.
-  Reconcile interrupted writes and retain later edits after native completion. Require caller-provided source/readiness checks;
-  CLI integration, transfer/activation orchestration and the full webmail completion receipt remain pending.
+  Reconcile interrupted writes and retain later edits after native completion. The webmail command supplies source/readiness checks.
+- [x] Connect the PostfixAdmin webmail stages in order: RoundCube data, editable filters, then native vacation/forwarding settings.
+  Require stopped writers, completed transfers/activation, reviewed proposals and live source/target holds. Retain partial-stage
+  recovery and approved deferrals; bind full completion to input fingerprints and all three backend receipts. Target release
+  rejects missing, partial, foreign or changed receipts and remains a separate explicit action.
 - [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.
   Preserve exact session ownership/value checks, draft confirmation, zero-session readback and unchanged user-data snapshots.
   Retain separate receipts and evidence; Plesk preview is available, while its revocation adapter remains pending.
@@ -195,7 +198,7 @@ Configuration generation is available in the current development version.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
   Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
   Check protocol controls, sessions, SOGo guards, delivery holds, sync jobs and detected scheduled/open-file writers.
-  Restoration is implemented but requires completed activation and webmail import; full webmail import integration remains pending.
+  Restoration requires completed activation and the full webmail receipt with matching native stage receipts.
   Read-only target isolation checks remain available during and after account activation.
 - [ ] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
   and require operator delivery/client checks including received-message authentication results.

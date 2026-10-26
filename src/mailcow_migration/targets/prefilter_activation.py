@@ -67,9 +67,7 @@ def activate_prefilters(
     operations = prefilter_activations(reviewed, state)
     validate_prefilter_journal(state, staged, operations)
     if activate:
-        transfer = context.state()
-        if transfer["mailPending"] or not transfer["finalMail"] or transfer["sievePending"] or not transfer["sieve"]:
-            raise MigrationError("Complete the final mail and Sieve passes before activating mailbox filters")
+        transfer = context.final_state()
         if operations and transfer.get("sieveEvidenceHash") != state["evidenceHash"]:
             raise MigrationError("Copied Sieve differs from staged mailbox filters; repeat Sieve and prefilter review before activation")
     settings = SogoSettingsImport.from_export(context.configuration, context.batch, evidence.directory)

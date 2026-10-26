@@ -21,6 +21,7 @@ from .sogo_target import run_sogo_target
 from .sieve import run_sieve
 from .source_delivery import run_source_delivery
 from .source_logins import run_source_logins
+from .webmail import run_webmail
 from .wizard import configure
 
 
@@ -28,7 +29,7 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="mailcow-migrate", description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
         epilog="Preparation, account staging, target isolation and PostfixAdmin login and delivery controls are available. "
-               "Mail/Sieve transfers and account activation require stopped writers. Full isolation and webmail integration remain pending.",
+               "Transfers, activation and webmail import require stopped writers. Full isolation and final handoff remain pending.",
     )
     result.add_argument("--version", action="version", version="%(prog)s " + __version__)
     commands = result.add_subparsers(dest="command", required=True)
@@ -41,6 +42,7 @@ def parser() -> argparse.ArgumentParser:
         ("accounts", "Preview or stage inactive accounts from a completed saved plan"),
         ("verify", "Verify account inventory against the saved plan and recorded activation phase"),
         ("activate", "Restore planned account activity under verified isolation after final mail, Sieve and filter checks"),
+        ("webmail", "Preview or import approved RoundCube data, editable filters and native settings while retaining isolation"),
         ("target-isolation", "Preview, pause or check batch access and writers on Mailcow; retain guarded restoration state"),
         ("source-logins", "Preview, freeze, check or release PostfixAdmin batch logins while preserving other query exclusions"),
         ("source-delivery", "Preview, pause or check PostfixAdmin delivery, recipient routing and RoundCube sessions"),
@@ -57,13 +59,13 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("domain", metavar="DOMAIN", help="Lowercase primary mail domain")
         if name == "inspect":
             command.add_argument("--output", type=Path, metavar="FILE", help="Save a private JSON report to a new file")
-        if name in ("plan", "sieve", "prefilters", "activate"):
+        if name in ("plan", "sieve", "prefilters", "activate", "webmail"):
             command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
         if name == "plan":
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
         if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery",
-                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "activate"):
+                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "activate", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
             command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
@@ -74,7 +76,7 @@ def parser() -> argparse.ArgumentParser:
             action.add_argument("--apply", action="store_true", help="Merge explicit grants into staged inactive mailboxes")
             action.add_argument("--check", action="store_true",
                                 help="Read-only verification of completed sender permissions, including after activation")
-        if name in ("mail", "sieve", "activate"):
+        if name in ("mail", "sieve", "activate", "webmail"):
             command.add_argument("--apply", action="store_true", help="Apply the selected operation and journal its result")
             command.add_argument("--writers-stopped", action="store_true",
                                  help="Confirm batch writers, submission and account administration are stopped on both servers")
@@ -132,6 +134,9 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command == "activate":
             return run_activation(load_configuration(options.config), options.plan, options.export, apply=options.apply,
                                   ready=options.ready, writers_stopped=options.writers_stopped)
+        elif options.command == "webmail":
+            return run_webmail(load_configuration(options.config), options.plan, options.export, apply=options.apply,
+                               writers_stopped=options.writers_stopped)
         elif options.command == "target-isolation":
             return run_target_isolation(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
         elif options.command == "source-logins":

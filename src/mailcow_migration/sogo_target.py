@@ -47,5 +47,5 @@ def run_sogo_target(configuration: Configuration, file: Path, *, action: str = "
         print("Required SOGo tools, property-list conversion and effective identity settings passed checks.")
         if missing_user_sources(prepared.users, config):
             print("Domain user sources are not loaded yet; prepare-users --apply can refresh them with a shared SOGo restart.")
-        print("Use inspect-users for native data/folder checks. User-data import and full migration readiness remain pending.")
+        print("Use inspect-users for native data/folder checks, then webmail for guarded import after activation.")
     return 0

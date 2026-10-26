@@ -11,10 +11,9 @@ Append-only mail copying is available for staged PostfixAdmin batches with isola
 Guarded personal/default Sieve installation and compilation are available separately.
 Reviewed forwarding/vacation prefilters can be staged inactive with API readback and uncertain-request reconciliation.
 Explicit sender-permission mappings can be merged into inactive mailboxes while retaining existing grants and security requirements.
-Native editable SOGo filter import is implemented internally, with backups, conflict checks and script/preference readback.
-Native vacation/forwarding import is also implemented internally, including container timezone checks and prefilter handoff.
+Guarded webmail import connects RoundCube data, editable SOGo filters and native vacation/forwarding settings with native readback.
 Guarded PostfixAdmin account activation includes copied-Sieve checks, staged prefilters and preservation of completed native handoffs.
-Full source isolation, native SOGo command integration and full cutover remain pending.
+Full source isolation, quota recalculation and full cutover remain pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -36,6 +35,7 @@ This snapshot has not been validated end to end.
 | `prefilters` | Preview or stage inactive forwarding/vacation prefilters from the reviewed webmail plan. |
 | `senders` | Preview, merge or verify reviewed sender permissions, retaining existing grants and mailbox security settings. |
 | `activate` | Restore planned account/filter activity after final transfer checks, retaining source and target isolation. |
+| `webmail` | Preview or import approved RoundCube data, editable filters and native settings; retain isolation and verified completion receipts. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
@@ -239,7 +239,7 @@ records `target_verified: false` and `selection_recorded: false`: selection/excl
 privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-Mail execution is a separate guarded command. Integrated RoundCube import, full source isolation, DNS handoff and full migration resume remain pending.
+Mail execution and webmail import are separate guarded commands. Full source isolation, DNS handoff and full migration resume remain pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -310,7 +310,7 @@ without sending account edits. Keep all journals together; staging and transfers
 The completion marker is saved only after account, sender, filter and isolation checks succeed. Target protocol access, SOGo
 maintenance controls, sync-job pauses and delivery holds remain in place; source controls remain in place too. `verify` and
 `target-isolation --action check` can inspect this activated-but-isolated batch. Complete webmail import and its verification before
-target release. Quota recalculation, native import CLI integration, DNS/source-routing handoff and full migration completion remain pending.
+target release. Quota recalculation, DNS/source-routing handoff and full migration completion remain pending.
 
 ## Sender permissions
 
@@ -610,14 +610,45 @@ under isolation before a future import; this assessment is not an import receipt
 An existing destination address book without this application's import journal is a conflict, even if its contents appear to
 match. Native inspection never adopts that book or overwrites conflicting data. Read-only inspection reports missing user
 sources or failed lookups; the separate `prepare-users --apply` action can refresh sources and reconcile unknown-user caches.
-Configuration/user assessments retain `import_ready: false`; the import command remains pending. Account activation is a separate guarded step.
+Configuration/user assessments retain `import_ready: false`; account activation and the guarded webmail command establish the later prerequisites.
+
+## Webmail import
+
+After account activation, while source and target remain isolated, preview the approved PostfixAdmin webmail import:
+
+```bash
+mailcow-migrate webmail --config migration.json --plan /root/mailcow-in-progress/plans/example.org/first/plan.json \
+  --export /root/mailcow-in-progress/exports/example.org/EXPORT_ID --writers-stopped
+```
+
+The command requires final mail/Sieve receipts, completed account activation, matching recovery/sender inventories, paused
+source logins/delivery/sessions and target access/delivery controls. It reloads the approved RoundCube snapshot/proposal and
+saved webmail plan, including accepted preference deferrals. Changed inputs or unsupported mappings stop the operation.
+Prepare required SOGo configuration and user sources through `sogo-target` first; the import does not restart shared services.
+
+Preview checks existing contacts/preferences/folder state and editable filters, retaining private backups without importing
+user data or creating a completion receipt. Vacation/forwarding target checks run when editable-filter import is already complete;
+otherwise preview explicitly defers those checks until that prerequisite has been applied.
+
+Add `--apply` to import RoundCube preferences, contacts and folder state, then editable SOGo filters, then native vacation/forwarding
+settings, in that order. Every backend keeps its own conflict checks, pending receipts and native readback. Already completed
+stages retain subsequent user edits. Interrupted RoundCube/filter writes are inspected before resuming; uncertain native settings
+writes require reconciliation before another attempt. Source data remains unchanged, and approved deferrals remain visible.
+
+The private `roundcube/state.json` binds the batch, source/target, export, approved source/proposal fingerprints and all three
+backend receipts. Completion is recorded only after every stage completes and source, account, sender, isolation and prefilter
+handoff checks pass. A completed rerun verifies saved receipt integrity and leaves live user data untouched.
+
+Webmail completion leaves isolation paused. After reviewing the results, use `target-isolation --action release --apply` with
+the same config and plan to restore saved target access, delivery and sync jobs. Release requires this full completion receipt
+and unchanged, matching backend receipts; a missing, partial or foreign record cannot authorize it. Source isolation stays in
+place. Quota recalculation, DNS/source routing, operator client/delivery checks and full migration completion remain separate.
 
 ### Native import backend
 
-The internal SOGo importer now supports journaled preference, contact and folder-setting writes with native readback.
-It is not exposed by the CLI yet. Its caller must hold the shared workspace lock and provide live checks for completed mail
-transfer, activation and source/target isolation, plus source snapshot/folder verification. Connecting these checks to the
-full migration workflow remains pending; the preparation commands do not call the importer.
+The SOGo data backend supports journaled preference, contact and folder-setting writes with native readback. The `webmail`
+command supplies the shared lock, completed transfer/activation checks, live source/target isolation checks and source
+snapshot/folder verification. Preparation commands remain separate from importing user data.
 
 The backend checks every selected user's existing data before importing any preferences or contacts. It retains the first
 private native backup and records each preference write before execution. Contact imports use stable record IDs, chunks of
@@ -630,7 +661,7 @@ reconciled against fresh native backups; a completed native import retains subse
 
 Native operations share private temporary-file handling, retaining files on failure and removing only the expected file
 and empty directory after success. The separate `sogo-target/native-import-state.json` records `native_complete` for this
-backend and retains `import_complete: false`. It cannot satisfy the full webmail-import or target-release guards.
+backend and retains `import_complete: false`. This receipt alone cannot satisfy the full webmail-import or target-release guards.
 
 ### Editable filter import backend
 
@@ -650,10 +681,9 @@ receipt with original preferences before any write. Interrupted operations inspe
 scripts or unrelated preference drift block continuation. `filters_complete` is recorded only after all users pass readback.
 Once complete, subsequent target user edits are retained. This receipt keeps `import_complete: false` and does not authorize release.
 
-This backend has no CLI command yet. Its caller must hold the workspace lock and supply checks for final mail/Sieve transfer,
-activation, source/target isolation and unchanged source data. Applying also requires explicit stopped-writer confirmation.
-Source exports and readiness are rechecked before completion. Native vacation/forwarding settings use the separate backend
-below; full webmail workflow integration remains pending. Plesk scripts remain on their separate copy/compile path.
+The `webmail` command supplies the workspace lock, final transfer/activation checks, live isolation and unchanged-source checks,
+with explicit stopped-writer confirmation. Native vacation/forwarding settings use the next backend below. Plesk import remains
+blocked until its isolation/activation adapter is available; its scripts retain their separate copy/compile path.
 
 ### Native vacation and forwarding backend
 
@@ -676,9 +706,8 @@ The private `sogo-settings/state.json` records each verified user's settings/scr
 Any pending user blocks another attempt until the uncertain operation and backups are reconciled; writes are never blindly
 repeated. Completed imports retain subsequent user edits. The receipt keeps `import_complete: false` and does not authorize release.
 
-This backend has no CLI command yet. Its caller must hold the shared lock and enforce final mail/Sieve transfer, activation,
-source/target isolation and unchanged source data. Applying requires explicit stopped-writer confirmation. Command integration,
-full webmail completion and target release remain pending.
+The `webmail` command calls this backend last, under the shared lock and the final transfer/activation, isolation and source checks.
+Its completed receipt contributes to full webmail completion; target access release remains a separate explicit operation.
 
 ## PostfixAdmin source logins
 
@@ -767,7 +796,7 @@ changing services or queue scheduling.
 This snapshot provides no delivery-release command. Holds remain until guarded handoff is implemented and completed; releasing
 source logins alone does not remove them. The delivery journal explicitly records `source_isolated: false` and
 `webmail_sessions_verified: false`; session verification is recorded separately in the RoundCube session journal.
-Webmail import, complete submission checks and combined source readiness remain pending. Delivery receipts alone do not authorize
+Complete submission checks and combined source readiness remain pending. Delivery receipts alone do not authorize
 copying, activation or cutover; the mail command additionally checks target isolation and requires stopped-writer confirmation.
 Plesk retains its separate pending adapter.
 
@@ -820,7 +849,8 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
 | `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
-| `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
+| `webmail`, `targets.webmail_state` | Ordered webmail orchestration, pinned input/stage receipts and the full import gate for target release. |
+| `targets.sogo_import` | Journaled native preference/contact/folder import, preview and readback. |
 | `targets.sogo_filters`, `targets.sieve_runtime` | Internal editable-filter import, native preference preservation and Dovecot script readback. |
 | `targets.sogo_settings`, `plans.saved_webmail` | Internal native vacation/forwarding import, timezone/prefilter verification and shared saved-proposal checks. |
 | `mail`, `core.rsync`, `transfers` | Guarded Maildir append/preview, native rsync progress and shared transfer guards/receipts. |

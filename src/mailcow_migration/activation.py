@@ -20,12 +20,6 @@ from .targets.reconciliation import reconcile_pending
 from .transfers import TransferContext, require_transfer_host
 
 
-def require_final_transfers(context: TransferContext) -> None:
-    state = context.state()
-    if state["mailPending"] or not state["finalMail"] or state["sievePending"] or not state["sieve"]:
-        raise MigrationError("Final mail and Sieve passes for this plan must complete before activation")
-
-
 def run_activation(
     configuration: Configuration, file: Path, exported: Path, *, apply: bool = False, ready: bool = False, writers_stopped: bool = False,
 ) -> int:
@@ -57,7 +51,7 @@ def run_activation(
         requests = account_requests(operations)
         validate_account_journal(state, staging, operations if "activationRequests" in state else ())
         verify_account_inventory(batch.plan, inventory, recovery, state)
-        require_final_transfers(context)
+        context.final_state()
         if state.get("activated"):
             print("Batch already activated; its account inventory matches the plan. Webmail import and release are separate.")
             return 0
@@ -77,7 +71,7 @@ def run_activation(
             return current
 
         def verify_ready() -> None:
-            require_final_transfers(context)
+            context.final_state()
             verify_inventory()
             context.check_holds(target)
 

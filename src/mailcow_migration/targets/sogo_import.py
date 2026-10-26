@@ -128,14 +128,10 @@ class SogoImport:
         print(username + ": SOGo folder expansion imported and read back.")
         return state
 
-    def apply(self, *, verify_ready: Callable[[], None], check_source: Callable[[], None]) -> None:
-        """Caller holds the workspace lock; verify_ready checks transfer, activation and source/target isolation, raising on failure."""
+    def inspect(self, *, prepare_users: bool = False) -> Mapping[str, Any]:
         state = self.state()
         if state["native_complete"]:
-            print("Native SOGo import was already completed; subsequent target user edits are retained.")
-            return
-        verify_ready()
-        check_source()
+            return {}
         config = self.preparation.preflight()
         missing = missing_user_sources(self.preparation.users, config)
         if missing:
@@ -145,12 +141,24 @@ class SogoImport:
         for user in self.preparation.users:
             username = user["username"]
             journal = state["users"].get(username)
-            target.clear_unknown_user(username)
+            if prepare_users:
+                target.clear_unknown_user(username)
             backup = target.backup(username)
             check_preferences(backup, user, target.directory, journal)
             folders = inspect_folder_state(target.target, target.directory, user, backup, journal.get("folders") if journal else None)
             present = check_book(backup, username, user["book"], user["records"], owned=journal is not None)
             inventories[username] = {"contacts": present, "folders": folders}
+        return inventories
+
+    def apply(self, *, verify_ready: Callable[[], None], check_source: Callable[[], None]) -> None:
+        """Caller holds the workspace lock; verify_ready checks transfer, activation and source/target isolation, raising on failure."""
+        state = self.state()
+        if state["native_complete"]:
+            print("Native SOGo import was already completed; subsequent target user edits are retained.")
+            return
+        verify_ready()
+        check_source()
+        inventories = self.inspect(prepare_users=True)
         print("Native SOGo import journal: {}".format(self.file))
         for user in self.preparation.users:
             state = self.import_user(state, user, inventories[user["username"]]["contacts"], verify_ready)
