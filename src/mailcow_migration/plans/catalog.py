@@ -11,7 +11,7 @@ from ..core.storage import json_fingerprint, local_path, read_json
 from ..sources import configured_sources
 
 OPERATION_FILES = (
-    "state.json", "source-logins.json", "source-delivery.json", "source-isolation.json", "source-forwarding.json",
+    "state.json", "source-logins.json", "source-delivery.json", "source-submission.json", "source-isolation.json", "source-forwarding.json",
     "target-isolation.json", "webmail-target-isolation.json", "transfers.json", "prefilters.json", "senders.json",
     "admins.json", "admin-credentials.json", "quota.json", "roundcube/state.json", "roundcube-sessions/state.json",
     "sogo-target/config-state.json", "sogo-target/native-import-state.json", "sogo-filters/state.json",

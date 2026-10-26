@@ -8,13 +8,13 @@ import time
 from dataclasses import dataclass
 from http.client import HTTPException
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from ..configuration import MailcowConfiguration, api_origin
 from ..core.commands import CommandResult, run_command
-from ..core.errors import ApiError, ConfigurationError
+from ..core.errors import ApiError, ConfigurationError, MigrationError
 from ..core.storage import decode_json, read_text
 
 LOGGER = logging.getLogger("mailcow_migration")
@@ -118,6 +118,25 @@ class MailcowTarget:
     @property
     def api(self) -> MailcowApi:
         return MailcowApi(self.settings.api, Path(self.settings.api_key_file))
+
+    def compose_environment(self, services: Sequence[str], names: Sequence[str]) -> Mapping[str, Mapping[str, str]]:
+        try:
+            document = decode_json(self.compose(("config", "--format", "json")).stdout)
+        except ValueError as error:
+            raise MigrationError("Invalid Mailcow Compose configuration; environment contents omitted") from error
+        if not isinstance(document, dict) or not isinstance(document.get("services"), dict):
+            raise MigrationError("Mailcow Compose configuration has no service inventory")
+        result = {}
+        for name in services:
+            service = document["services"].get(name)
+            environment = service.get("environment") if isinstance(service, dict) else None
+            if not isinstance(environment, dict):
+                raise MigrationError("Mailcow Compose service has no environment: " + name)
+            selected = {key: environment.get(key) or "" for key in names}
+            if any(not isinstance(value, str) for value in selected.values()):
+                raise MigrationError("Unsupported Mailcow Compose environment values; contents omitted")
+            result[name] = selected
+        return result
 
     def compose(
         self, arguments: Sequence[str], *, input_text: Optional[str] = None, timeout: Optional[float] = 120, private_output: bool = True,

@@ -12,6 +12,7 @@ from .sogo_target import sogo_preparation
 from .sources.delivery import SourceDelivery
 from .sources.logins import SourceLogins, login_query
 from .sources.roundcube import roundcube_sessions
+from .sources.submission import SourceSubmission
 
 
 def run_source_logins(configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False) -> int:
@@ -36,6 +37,7 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
                 raise MigrationError("Resolve the saved planning findings before freezing source logins:\n" + findings)
             if action == "freeze":
                 require_server_settings(batch, configuration)
+                SourceSubmission(batch, configuration).inspect()
                 print("Checking source delivery prerequisites before changing logins...")
                 SourceDelivery(batch, configuration.mailcow.api).inspect()
                 roundcube_sessions(batch, configuration).preflight()
@@ -55,5 +57,5 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
                 logins.apply(snapshot, freeze=action == "freeze")
                 print("Source login freeze completed." if action == "freeze" else
                       "Source login exclusion removed. Migration stopped; review separate delivery holds before returning users.")
-        print("Delivery, SMTP submission and RoundCube sessions are outside this login step. Full source isolation is still required before copying.")
+        print("Source-delivery verifies SMTP readiness, delivery holds and RoundCube revocation after the login freeze.")
     return 0

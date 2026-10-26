@@ -8,10 +8,12 @@ from . import __version__
 from .accounts import run_accounts
 from .admins import run_admins
 from .activation import run_activation
+from .certificates import run_certificate
 from .configuration import load_configuration
 from .core.errors import ConfigurationError, MigrationError
 from .exporting import run_export
 from .inspection import run_inspection
+from .handoff import run_handoff
 from .isolation import run_target_isolation
 from .mail import run_mail
 from .planning import run_plan
@@ -21,10 +23,12 @@ from .roundcube_sessions import run_roundcube_sessions
 from .senders import run_senders
 from .server_export import run_server_export
 from .server_settings import run_server_settings
+from .signing import run_signing
 from .sogo_target import run_sogo_target
 from .sieve import run_sieve
 from .source_delivery import run_source_delivery
 from .source_isolation import run_source_isolation
+from .source_forwarding import run_source_forwarding
 from .source_logins import run_source_logins
 from .source_selection import run_source_selection
 from .webmail import run_webmail
@@ -57,6 +61,10 @@ def parser() -> argparse.ArgumentParser:
         ("source-logins", "Preview, freeze, check or release PostfixAdmin batch logins while preserving other query exclusions"),
         ("source-delivery", "Preview, pause or check PostfixAdmin delivery, recipient routing and RoundCube sessions"),
         ("source-isolation", "Preview, freeze, check or release Plesk logins, submission and delivery with saved recovery state"),
+        ("source-forward", "Preview or apply per-domain forwarding after completed import and target restoration"),
+        ("certificate", "Preview, request or verify the mail hostname certificate across all five TLS client endpoints"),
+        ("signing", "Select Mailcow or provider DKIM and preview or apply missing-key generation and domain relay assignment"),
+        ("handoff", "Guide DNS/client checks, verify TLS/MX/signing/queues and record completion only after operator confirmations"),
         ("roundcube-sessions", "Preview RoundCube user data and batch sessions; revoke or check sessions under verified source isolation"),
         ("sogo-target", "Preview or configure required SOGo settings and inspect existing user-data conflicts"),
         ("mail", "Preview or append source Maildirs under verified isolation; preserve existing target files"),
@@ -84,7 +92,8 @@ def parser() -> argparse.ArgumentParser:
         if name == "server-settings":
             command.add_argument("--action", choices=("preview", "review", "apply", "check"), default="preview")
             command.add_argument("--apply", action="store_true", help="Required with action apply; selected shared settings affect all domains")
-        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "source-isolation",
+        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "source-isolation", "source-forward",
+                    "certificate", "signing", "handoff",
                     "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "admins", "activate", "quota", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
@@ -132,6 +141,33 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--apply", action="store_true", help="Required for freeze/release; retain local and source recovery journals")
             command.add_argument("--writers-stopped", action="store_true",
                                  help="Confirm custom source imports and account administration are stopped")
+        if name == "source-forward":
+            command.add_argument("--target-ip", required=True, metavar="IP", help="Fixed Mailcow address reachable from the source on TCP 25")
+            command.add_argument("--apply", action="store_true", help="Start real source-to-Mailcow delivery after recipient/queue checks")
+        if name == "certificate":
+            command.add_argument("--hostname", help="Public client hostname; defaults to mail.DOMAIN")
+            command.add_argument("--action", choices=("preview", "apply", "check", "retry"), default="preview")
+            command.add_argument("--apply", action="store_true", help="Required with apply/retry; shared nginx/ACME services may restart")
+            command.add_argument("--wait-seconds", type=int, default=300, help="TLS verification window, 10 to 3600 seconds")
+        if name == "signing":
+            command.add_argument("--signer", choices=("mailcow", "relay"), help="Defaults to the saved signer, otherwise Mailcow")
+            command.add_argument("--dkim-name", help="Provider selector._domainkey.DOMAIN")
+            command.add_argument("--cname", help="Provider DKIM CNAME destination; retained as a delegation")
+            command.add_argument("--public-key", help="Provider public key after p= for a TXT record")
+            command.add_argument("--key-type", choices=("rsa", "ed25519"), help="Provider TXT key type; defaults to saved type or rsa")
+            command.add_argument("--relay-id", help="Existing active sender-dependent Mailcow relay ID")
+            command.add_argument("--apply", action="store_true",
+                                 help="Generate only a missing DKIM key or assign the explicitly selected domain relay")
+        if name == "handoff":
+            command.add_argument("--hostname", help="Public client hostname; defaults to mail.DOMAIN")
+            command.add_argument("--action", choices=("preview", "check", "complete"), default="preview")
+            command.add_argument("--apply", action="store_true", help="Required to record final completion after fresh checks")
+            command.add_argument("--delivery-confirmed", action="store_true", help="Confirm inbound/outbound, alias and catch-all delivery checks")
+            command.add_argument("--clients-confirmed", action="store_true",
+                                 help="Confirm client logins, folders, contents, attachments and webmail data")
+            command.add_argument("--message-auth-confirmed", action="store_true",
+                                 help="Confirm received SPF/DKIM/DMARC and relay Return-Path results")
+            command.add_argument("--permissions-confirmed", action="store_true", help="Confirm allowed/rejected send-as and BCC behavior")
         if name == "source-delivery":
             command.add_argument("--action", choices=("preview", "pause", "check"), default="preview", help="Defaults to read-only preview")
             command.add_argument("--apply", action="store_true", help="Pause delivery and revoke RoundCube sessions after isolation and draft checks")
@@ -195,6 +231,19 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         elif options.command == "source-isolation":
             return run_source_isolation(configuration, options.plan, action=options.action, apply=options.apply,
                                         writers_stopped=options.writers_stopped)
+        elif options.command == "source-forward":
+            return run_source_forwarding(configuration, options.plan, options.target_ip, apply=options.apply)
+        elif options.command == "certificate":
+            return run_certificate(configuration, options.plan, hostname=options.hostname, action=options.action,
+                                   apply=options.apply, wait_seconds=options.wait_seconds)
+        elif options.command == "signing":
+            return run_signing(configuration, options.plan, signer=options.signer, dkim_name=options.dkim_name,
+                               cname=options.cname, public_key=options.public_key, key_type=options.key_type,
+                               relay_id=options.relay_id, apply=options.apply)
+        elif options.command == "handoff":
+            return run_handoff(configuration, options.plan, hostname=options.hostname, action=options.action, apply=options.apply,
+                               delivery_confirmed=options.delivery_confirmed, clients_confirmed=options.clients_confirmed,
+                               message_auth_confirmed=options.message_auth_confirmed, permissions_confirmed=options.permissions_confirmed)
         elif options.command == "roundcube-sessions":
             return run_roundcube_sessions(configuration, options.plan, action=options.action, apply=options.apply,
                                           directory=options.directory, drafts_saved=options.drafts_saved,

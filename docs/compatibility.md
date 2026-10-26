@@ -20,7 +20,7 @@ Inactive forwarding/vacation prefilter staging is available separately, with exa
 Explicit sender-permission staging and read-only verification are also available.
 Domain administrator preview/import/check supports reviewed PostfixAdmin mappings and preserves existing target memberships/security.
 Plesk source isolation, mail/Sieve transfer, activation, quota recalculation and native RoundCube import are implemented;
-full PostfixAdmin submission isolation and full recovery remain planned work.
+PostfixAdmin submission checks and guarded forwarding/handoff are implemented. Guided orchestration remains pending.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 All operational CLI commands pass the same loader before dispatch; the wizard remains the file-creation path.
@@ -135,7 +135,10 @@ Postfix retry/error transport, hash/regexp maps, `postconf`, `postmap`, `postfix
 Only hash BCC maps beneath `/etc/postfix` are adapted; global `always_bcc`, incompatible service overrides, linked domains and
 recipient delimiters other than empty or `+` block this path. Queue inspection selects `postcat -e` for Postfix 2.7 or later,
 otherwise parses `postcat -v` locally without retaining message content. Its delivery pause is not full source isolation;
-RoundCube sessions are revoked after delivery holds. Combined submission checks and guarded forwarding/release remain pending.
+RoundCube sessions are revoked after delivery holds. PostfixAdmin submission verification requires the supported Dovecot SASL
+backend, full-address usernames, no master/default-realm rewriting, and live authentication sockets matching Postfix's settings.
+Attached/braced service overrides need an adapter. SMTP workers drain with delivery workers before readiness is recorded;
+rejected SMTP-auth lookups and unchanged configuration are rechecked before further migration work.
 Postfix commands and configuration must permit scoped submission/delivery holds, queue inspection, and source forwarding.
 Mailboxes must use the inspected Maildir layout. A resolvable mail-root symlink is allowed; unsafe mailbox/message links block copying.
 
@@ -300,6 +303,16 @@ Require configured SSH authentication and verified host keys, database access on
 authoritative queries, and reachability of the Mailcow API and selected mail endpoints. Handoff checks cover SMTP 25,
 HTTPS 443, IMAPS 993, POP3S 995, SMTPS 465, and STARTTLS submission 587 under the initial service profile.
 Configurable service profiles are future work.
+
+Automatic certificate setup needs the OpenSSL CLI for independent hostname and expiry checks; runtime TLS checks verify trust,
+hostname and TLS 1.2 or newer on every address. See the [OpenSSL x509 options](https://docs.openssl.org/3.0/man1/openssl-x509/).
+Certificate work preserves config ownership, other SAN/server names, custom-certificate ownership and all recorded backups.
+Two successful endpoint passes at least ten seconds apart are required; an ACME status message alone is insufficient.
+SPF verification requires explicit passing ip4/ip6 coverage before the all term and does not expand includes/a/mx mechanisms.
+DKIM TXT checks reject malformed/revoked keys; provider CNAME targets remain pinned while their published keys may rotate.
+Handoff records first DNS observations/TTLs, checks all authoritative MX destinations, readable mailbox counters and both queues.
+Completion additionally requires explicit operator delivery/client/permission and received-message authentication confirmations.
+The source SSH endpoint must remain stable through DNS changes. No automatic DNS edits or general post-cutover rollback are provided.
 
 GitHub API access is optional and informational for upstream SOGo/SOPE feature status. A GitHub token is optional.
 Node.js and npm are not dependencies of the new application. The foundation uses only the Python standard library at

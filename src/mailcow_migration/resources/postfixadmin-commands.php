@@ -26,7 +26,7 @@ function processes() {
         if (!file_exists($file)) continue;
         try { $name = trim(file_get_contents($file)); }
         catch (ErrorException $error) { if (!file_exists(dirname($file))) continue; throw $error; }
-        if (in_array($name, array('qmgr', 'cleanup', 'pipe', 'local', 'virtual', 'deliver', 'dovecot-lda'), true)) {
+        if (in_array($name, array('smtpd', 'qmgr', 'cleanup', 'pipe', 'local', 'virtual', 'lmtp', 'deliver', 'dovecot-lda'), true)) {
             $result[] = basename(dirname($file));
         }
     }

@@ -47,7 +47,7 @@ class Workspace:
 
 
 def require_identity(state: Mapping[str, Any], expected: Mapping[str, Any]) -> None:
-    if any(key not in state or state[key] != value for key, value in expected.items()):
+    if not isinstance(state, Mapping) or any(key not in state or state[key] != value for key, value in expected.items()):
         raise MigrationError("Saved migration identity differs; reconcile the existing batch before changing its connection or plan")
 
 
@@ -92,3 +92,16 @@ class OperationJournal:
         completed = {key: value for key, value in pending.items() if key not in ("pending", "pendingRequest")}
         self.save({**completed, "done": [*done, identifier]})
         return "completed"
+
+
+def reconcile_observed_mutation(
+    journal: OperationJournal, identifier: str, endpoint: str, payload: Mapping[str, Any], verified: bool,
+) -> None:
+    state = journal.read()
+    if state.get("pending") != identifier:
+        return
+    if state.get("pendingRequest") != {"endpoint": endpoint, "payload": payload} or not verified:
+        raise MigrationError("Uncertain write cannot be reconciled; do not repeat it. Journal: "
+                             + str(journal.workspace.path(journal.relative_path)))
+    journal.save({**{key: value for key, value in state.items() if key not in ("pending", "pendingRequest")},
+                  "done": list(dict.fromkeys([*state["done"], identifier]))})

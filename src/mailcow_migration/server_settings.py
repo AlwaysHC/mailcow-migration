@@ -5,7 +5,7 @@ from typing import Any, Mapping, Sequence
 
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
-from .core.state import OperationJournal, Workspace, require_identity
+from .core.state import OperationJournal, Workspace, reconcile_observed_mutation, require_identity
 from .core.storage import json_fingerprint, private_directory, read_json, write_private_json
 from .plans.global_settings import plan_global_settings
 from .plans.postfix import postfix_evidence
@@ -104,16 +104,6 @@ def selected_server_rows(inventory: Sequence[Mapping[str, Any]], selection: Mapp
     return tuple(selected), tuple(excluded), tuple(administrators)
 
 
-def reconcile_server_request(journal: OperationJournal, identifier: str, endpoint: str, payload: Mapping[str, Any], verified: bool) -> None:
-    state = journal.read()
-    if state.get("pending") != identifier:
-        return
-    if state.get("pendingRequest") != {"endpoint": endpoint, "payload": payload} or not verified:
-        raise MigrationError("Uncertain shared-setting write cannot be reconciled; keep its journal and do not repeat the request")
-    journal.save({**{key: value for key, value in state.items() if key not in ("pending", "pendingRequest")},
-                  "done": [*state["done"], identifier]})
-
-
 def run_server_settings(configuration: Configuration, exported: Path, *, action: str = "preview", apply: bool = False) -> int:
     require_mailcow_host()
     if action not in ("preview", "review", "apply", "check") or apply != (action == "apply"):
@@ -193,7 +183,7 @@ def run_server_settings(configuration: Configuration, exported: Path, *, action:
             identifier = "transport " + row["id"]
             if identifier in state["done"] and not exists:
                 raise MigrationError("Previously imported shared transport disappeared; no replacement attempted")
-            reconcile_server_request(journal, identifier, "add/transport", row["payload"], exists)
+            reconcile_observed_mutation(journal, identifier, "add/transport", row["payload"], exists)
         for row in administrators:
             matches = tuple(item for item in admin_inventory if item.get("username") == row["username"])
             if (len(matches) > 1 or matches and api_number(matches[0].get("active")) != row["active"]
@@ -208,7 +198,7 @@ def run_server_settings(configuration: Configuration, exported: Path, *, action:
                     raise MigrationError("Restore the original private administrator credentials before reconciling this creation")
                 payload = {"username": row["username"], "active": row["active"], "password": password, "password2": password}
                 verified = bool(matches) and verify_target_password(target, "admin", payload, password, directory)
-                reconcile_server_request(journal, identifier, "add/admin", payload, verified)
+                reconcile_observed_mutation(journal, identifier, "add/admin", payload, verified)
         if journal.read().get("pending"):
             raise MigrationError("Shared journal has an unresolved operation outside the current selection")
         config_rows = tuple(row for row in actions if row["kind"] != "transport")

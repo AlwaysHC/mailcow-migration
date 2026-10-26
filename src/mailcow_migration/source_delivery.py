@@ -12,6 +12,7 @@ from .sogo_target import sogo_preparation
 from .sources.delivery import HOLD, SourceDelivery
 from .sources.logins import SourceLogins
 from .sources.roundcube import roundcube_sessions
+from .sources.submission import SourceSubmission
 
 
 def run_source_delivery(configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False) -> int:
@@ -30,6 +31,7 @@ def run_source_delivery(configuration: Configuration, file: Path, *, action: str
                 SourceLogins(batch).check()
             delivery.check()
             sessions.check()
+            SourceSubmission(batch, configuration).check()
             print("Source delivery, recipient routing, queued envelopes, detected writers and RoundCube sessions passed checks.")
         else:
             findings = batch.blocking_findings
@@ -51,11 +53,14 @@ def run_source_delivery(configuration: Configuration, file: Path, *, action: str
                 print("Preview finished; no source configuration or delivery journal was changed.")
             else:
                 require_server_settings(batch, configuration)
+                submission = SourceSubmission(batch, configuration)
+                submission_snapshot = submission.inspect()
                 if batch.plan["mailboxes"]:
                     SourceLogins(batch).check()
                 sogo_preparation(configuration, batch).preflight()
                 delivery.pause(snapshot)
                 sessions.revoke()
-                print("Source delivery pause completed. Holds remain until the guarded handoff workflow is available and completed.")
-        print("Webmail import, combined submission checks and complete migration readiness remain pending.")
+                submission.complete(submission_snapshot)
+                print("Source delivery and SMTP isolation verified. Holds remain until source-forward is applied after target restoration.")
+        print("Target isolation and later import/handoff stages remain separate requirements.")
     return 0

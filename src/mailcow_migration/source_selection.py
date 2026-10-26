@@ -14,6 +14,7 @@ from .core.storage import local_path, read_json, write_private_json
 from .inspection import InspectionReport, inspect_domain, require_inspection_host
 from .plans.catalog import known_batches, require_batch_ownership
 from .plans.saved import SavedPlan, load_saved_plan, validate_plan_inventory
+from .sources.inventory import inspect_source
 from .targets.mailcow import MailcowTarget
 
 
@@ -48,8 +49,12 @@ def record_target_addresses(batch: SavedPlan, configuration: Configuration) -> N
         raise MigrationError("Complete account activation before recording target addresses for DNS resume")
     file = local_path(batch.directory / "source-selection-target.json")
     target = MailcowTarget(configuration.mailcow)
-    name = hostname(target.compose(("exec", "-T", "postfix-mailcow", "postconf", "-h", "myhostname")).stdout.strip())
+    environment = target.compose_environment(("acme-mailcow",), ("MAILCOW_HOSTNAME",))
+    name = hostname(environment["acme-mailcow"]["MAILCOW_HOSTNAME"])
     addresses = authoritative_addresses(name)
+    source_ips = inspect_source(batch.source, batch.plan["domain"]).ips
+    if any(address in source_ips for address in addresses):
+        raise MigrationError("Mailcow hostname still resolves to the source; correct its target DNS before recording resume addresses")
     if file.exists():
         previous = saved_target_addresses(batch, configuration)
         if read_json(file, private=True)["hostname"] != name or set(previous) != set(addresses):

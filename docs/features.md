@@ -5,7 +5,8 @@ Checked items are implemented. Unchecked items are not fully covered; notes dist
 The pre-alpha supports configuration, source inspection, private exports, planning, staging and account verification.
 PostfixAdmin isolation, mail/Sieve transfer, activation, quota recalculation and webmail import are available as explicit operations.
 Plesk isolation, mail/Sieve transfer, activation, quota recalculation and RoundCube import are also available.
-Full handoff and end-to-end validation remain unfinished.
+Explicit forwarding, certificate/signing setup, handoff checks and confirmed completion are available.
+Guided orchestration and end-to-end validation remain unfinished.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -210,10 +211,11 @@ Configuration generation is available in the current development version.
   Interactive review records every selection/exclusion and explicit full-server administrator ownership/privilege approval.
   Verify native routes and credential maps, preserve unrelated Postfix settings, retain backups and reconcile uncertain API writes.
   File updates use guarded rollback; failed rollback remains pending. Domain writes/freezing/activation require matching verified shared receipts.
-- [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
+- [x] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
   and revoke webmail access while leaving unrelated domains operational.
   Plesk supports native preview/freeze/check/pre-activation release, Dovecot denial, SMTP/deferred delivery, worker draining,
-  writer checks and RoundCube revocation. Combined PostfixAdmin submission checks remain pending.
+  writer checks and RoundCube revocation. PostfixAdmin verifies Dovecot-backed SMTP sockets and rejected SMTP auth lookups,
+  binds the live submission configuration, and drains old SMTP sessions with delivery workers before recording readiness.
 - [x] Preview, freeze, check and release PostfixAdmin batch logins using the supported SQL passdb and exact query exclusions.
   Preserve other batches' exclusions, source-side full configuration backups, cache flushing and session checks.
   Retain a source/plan-bound operation journal and block changes after target activation starts or during uncertain target writes.
@@ -222,19 +224,24 @@ Configuration generation is available in the current development version.
   Preserve other domains and original BCC maps, retain filtered copies/backups, drain workers and verify queue envelopes and detected writers.
   Record queue-history evidence and block ambiguous prior expansion, original-recipient history, BCC copies and administrative holds.
   Keep the global original-recipient setting and queue scheduling unchanged; do not delete or globally requeue messages.
-  RoundCube session revocation and its own verification run after delivery holds; full source submission checks,
-  guarded handoff and the separate Plesk adapter remain pending.
+  RoundCube revocation and source-submission verification follow delivery holds; guarded forwarding uses the matching native adapter.
 - [x] **Preserve:** Isolate target access, delivery, and relevant background writers during staging and verification.
   Do not silently stop an unrelated or shared job whose ownership is unknown.
   Preview and explicitly pause staged batches; retain original settings, configuration backups and interrupted route updates.
   Check protocol controls, sessions, SOGo guards, delivery holds, sync jobs and detected scheduled/open-file writers.
   Restoration requires completed activation, quota recalculation and the full webmail receipt with matching native stage receipts.
   Read-only target isolation checks remain available during and after account activation.
-- [ ] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
+- [x] **Preserve:** Guide DNS/certificate handoff, inspect both queues, verify MX/address records and SPF/DKIM,
   and require operator delivery/client checks including received-message authentication results.
-- [ ] **Configure:** Offer confirmed certificate setup, DKIM generation, relay assignment, and per-domain source forwarding.
+  Preserve first DNS observations/TTLs, require two stable trusted TLS passes, verify every batch MX and the chosen signer,
+  check mailbox readability and block source queues or deferred/held target delivery. Public-key delegations may rotate.
+- [x] **Configure:** Offer confirmed certificate setup, DKIM generation, relay assignment, and per-domain source forwarding.
   DNS edits remain operator-managed. Preserve recipient validation, alias domains, and catch-all policy in forwarding.
-- [ ] **Preserve:** Mark a batch complete only after required imports, activation, verification, and delivery confirmation succeed.
+  Certificate changes retain backups and pending stages, preserve unrelated names and custom issuers, and require explicit retries.
+  Generate only missing Mailcow DKIM keys; pin provider choices and relay inheritance. Forwarding retains source login blocks and queue safeguards.
+- [x] **Preserve:** Mark a batch complete only after required imports, activation, verification, and delivery confirmation succeed.
+  Completion requires fresh handoff checks plus explicit delivery, client, message-authentication and permission confirmations.
+  Preserve the first completion and an immutable evidence snapshot; later checks do not overwrite its historical evidence.
 
 ## Recovery and configuration
 

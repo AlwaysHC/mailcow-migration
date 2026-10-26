@@ -16,7 +16,8 @@ Explicit sender-permission mappings can be merged into inactive mailboxes while 
 Reviewed domain administrators can be imported after activation, preserving existing memberships/security and generating private new credentials.
 Guarded webmail import connects RoundCube data, editable SOGo filters and native vacation/forwarding settings with native readback.
 Guarded PostfixAdmin account activation includes copied-Sieve checks, staged prefilters and preservation of completed native handoffs.
-Quota recalculation is available for activated mailboxes under isolation. Full source isolation and full cutover remain pending.
+Quota recalculation is available for activated mailboxes under isolation. Source submission checks, forwarding, certificate/signing
+setup and confirmed handoff are available as explicit operations; guided orchestration remains pending.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
@@ -35,6 +36,10 @@ This snapshot has not been validated end to end.
 | `source-logins` | Preview, freeze, check and release PostfixAdmin batch logins, with source-side configuration backups and a private journal. |
 | `source-delivery` | Preview, pause and check PostfixAdmin delivery, recipient expansion and RoundCube sessions, with recovery records. |
 | `source-isolation` | Preview, freeze, check and release Plesk login/submission/delivery controls before activation. |
+| `source-forward` | Preview or start verified per-domain delivery to Mailcow after import and target restoration. |
+| `certificate` | Preview, request or verify client-hostname certificates, preserving other names and recorded backups. |
+| `signing` | Review Mailcow/provider DKIM and apply only missing-key generation or the selected domain relay assignment. |
+| `handoff` | Verify TLS, DNS, signing, source forwarding, mailbox readability and queues; record completion after explicit confirmations. |
 | `roundcube-sessions` | Save/review source snapshots and SOGo proposals; revoke/check batch sessions after source isolation. |
 | `sogo-target` | Prepare identity settings/user lookups, check effective settings, and inspect native data/folder-state conflicts. |
 | `mail` | Preview or append Maildir files under isolation, preserving existing files and recording applied/final passes. |
@@ -153,7 +158,8 @@ mailcow-migrate select-source example.org --config migration.json \
   --plan /root/mailcow-in-progress/plans/example.org/first/plan.json --record-target-addresses
 ```
 
-This reads the running target Postfix hostname and its authoritative A/AAAA records. The private `source-selection-target.json`
+This reads Mailcow's configured hostname from Compose and its authoritative A/AAAA records, rejecting source-server addresses.
+The private `source-selection-target.json`
 binds those addresses to the plan, source, API and Mailcow directory. Recording requires completed activation without a pending
 account request; repeat recording verifies the first snapshot rather than replacing changed addresses. It changes no mail service.
 After DNS changes, selection accepts those saved addresses only with matching activation evidence, applies the same rule to
@@ -324,7 +330,7 @@ records `target_verified: false` and `selection_recorded: false`: apply and veri
 Its separate receipt records selections, exclusions, relay and administrator decisions. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-Mail execution and webmail import are separate guarded commands. Full source isolation, DNS handoff and full migration resume remain pending.
+Mail execution, webmail import and handoff are separate guarded commands. Guided migration orchestration remains pending.
 Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
@@ -416,7 +422,7 @@ without sending account edits. Keep all journals together; staging and transfers
 The completion marker is saved only after account, sender, filter and isolation checks succeed. Target protocol access, SOGo
 maintenance controls, sync-job pauses and delivery holds remain in place; source controls remain in place too. `verify` and
 `target-isolation --action check` can inspect this activated-but-isolated batch. Recalculate quota, then complete webmail import
-and its verification before target release. DNS/source-routing handoff and full migration completion remain pending.
+and its verification before target release. Continue with certificate/signing setup, source forwarding and handoff verification afterward.
 
 ## Quota recalculation
 
@@ -561,7 +567,8 @@ mailcow-migrate mail --config migration.json --plan /root/mailcow-in-progress/pl
 
 `--writers-stopped` is required for preview and apply. Supply it only after stopping batch writes, submission and account
 administration on both servers. The command rechecks the existing login, delivery, queue, session and detected-writer controls;
-custom writers hidden behind scripts and complete submission isolation still require operator action. Resolve saved blocking
+custom writers hidden behind scripts still require operator action. PostfixAdmin SMTP authentication and session draining are also checked.
+Resolve saved blocking
 findings first. Plesk copying remains unavailable until its isolation adapter is implemented.
 
 The command requires matching completed account receipts, inactive target accounts and a completed target pause, with no
@@ -699,8 +706,8 @@ through preview while retaining their session receipts and unchanged baseline. I
 
 Session completion is distinct from webmail-import completion: this journal retains `import_complete: false` and
 `source_isolated: false`, and cannot satisfy Mailcow's webmail-import release guard. Proposals retain `target_verified: false` and
-`import_complete: false`. SOGo target preparation and native conflict inspection are separate operations; integrated import/readback,
-combined submission checks and migration readiness remain pending.
+`import_complete: false`. SOGo preparation, guarded import/readback and combined source checks are separate operations;
+session revocation alone does not establish migration readiness.
 
 ## SOGo target preparation
 
@@ -913,7 +920,7 @@ activation or an uncertain target write. Release leaves separate delivery holds 
 review those holds before returning users to the source. Do not restore an entire SQL configuration over later batches' changes.
 
 This command implements login control only. Delivery controls and RoundCube session revocation are separate steps.
-Complete submission checks and the combined migration workflow remain pending; a successful login freeze does not establish
+Source delivery pause also verifies the supported SMTP authentication path; a successful login freeze alone does not establish
 full source isolation or migration readiness.
 
 ## PostfixAdmin source delivery
@@ -957,10 +964,10 @@ pause can leave holds or mappings installed; retain all records and rerun the sa
 `--action check` verifies a completed delivery pause, its login freeze and the separate RoundCube session receipt without
 changing services or queue scheduling.
 
-This snapshot provides no delivery-release command. Holds remain until guarded handoff is implemented and completed; releasing
+There is no general delivery rollback. Holds remain until guarded source forwarding is applied; releasing
 source logins alone does not remove them. The delivery journal explicitly records `source_isolated: false` and
 `webmail_sessions_verified: false`; session verification is recorded separately in the RoundCube session journal.
-Complete submission checks and combined source readiness remain pending. Delivery receipts alone do not authorize
+Combined source readiness also requires the separate submission and RoundCube receipts. Delivery receipts alone do not authorize
 copying, activation or cutover; the mail command additionally checks target isolation and requires stopped-writer confirmation.
 Plesk uses the separate native `source-isolation` adapter.
 
@@ -1012,7 +1019,7 @@ are retained separately. Changed or unowned configuration blocks continuation. K
 
 `--action release --apply` restores saved access, delivery and sync-job settings only after matching receipts confirm completed
 activation, quota recalculation and the full webmail import. Initial isolation refuses activation in progress, a released batch
-or an interrupted release. Isolation never copies mail or activates accounts; full source isolation and handoff remain pending.
+or an interrupted release. Isolation never copies mail or activates accounts; source controls and handoff use their separate guarded commands.
 
 ### Target isolation for unfinished webmail import
 
@@ -1044,6 +1051,55 @@ only; it does not recopy mail or restart completed imports.
 Source recovery is limited to the pre-activation boundary. Activation intent, uncertain writes, missing account evidence after
 target isolation, or a forwarding/completion record block release. PostfixAdmin login release retains separate delivery holds;
 Plesk release restores its saved access/delivery controls. Neither action is a general rollback or copies target mail back.
+
+## Forwarding and final handoff
+
+After webmail completion and target access restoration, use the original configuration and plan:
+
+```bash
+migration_plan=/root/mailcow-in-progress/plans/example.org/first/plan.json
+mailcow-migrate certificate --config migration.json --plan "$migration_plan"
+mailcow-migrate certificate --config migration.json --plan "$migration_plan" --action apply --apply
+mailcow-migrate signing --config migration.json --plan "$migration_plan" --signer mailcow --apply
+mailcow-migrate source-forward --config migration.json --plan "$migration_plan" --target-ip 192.0.2.10
+mailcow-migrate source-forward --config migration.json --plan "$migration_plan" --target-ip 192.0.2.10 --apply
+mailcow-migrate handoff --config migration.json --plan "$migration_plan" --action check
+```
+
+Use the real target address reachable from the source on TCP 25, including a routed private address when appropriate.
+Keep the configured source SSH hostname stable through DNS changes. Forwarding rejects source/loopback destinations and
+verifies accepted, rejected and catch-all recipients without sending a message during its SMTP probes. Applying starts real
+queued delivery, retains source login/submission blocks and pins the destination. Source maps, queued-recipient history and
+other domains are preserved; ambiguous expansion/history or shared-map drift blocks continuation.
+
+Certificate setup defaults to `mail.DOMAIN`; `--hostname` selects the intended client name. Its A/AAAA records must identify
+Mailcow, not the source. Preview explains shared nginx/ACME effects. Application preserves other configured names, backs up
+the configuration and records each stage before changes. Separate certificates retain their HTTPS virtual-host selection;
+custom issuers require their own certificate manager. Interrupted requests retain all backups. `--action check` waits without
+restarting services; use `--action retry --apply` only after correcting the cause. All five endpoints must pass twice at least
+10 seconds apart. Configuration preview and TLS status do not claim that issuance has succeeded.
+
+For provider signing, choose `--signer relay --dkim-name selector._domainkey.example.org --relay-id ID` and provide `--cname`
+or `--public-key` with its `--key-type`. Active provider CNAMEs are discovered when available and retained as delegations so
+provider keys can rotate. Mailcow signing creates only a missing 2048-bit key after `--apply`; an existing or changed key is
+never reset. The selected domain relay and mailbox inheritance must verify. Publish the displayed DNS records yourself.
+
+Handoff retains first DNS observations and TTLs, verifies authoritative MX/A/AAAA agreement for all batch domains, explicit
+Mailcow IP coverage in one SPF policy, and the selected DKIM record. SPF includes/a/mx mechanisms are retained but not expanded.
+It also checks every mailbox's readable folders/message counters and both queues. Source batch queues and deferred/held target
+delivery block completion. These checks do not prove every message's content or actual received-message authentication results.
+
+After controlled inbound/outbound, alias/catch-all, client, attachment/webmail, sender-permission/BCC and received SPF/DKIM/DMARC
+checks have succeeded, record the operator confirmations:
+
+```bash
+mailcow-migrate handoff --config migration.json --plan "$migration_plan" --action complete --apply \
+  --delivery-confirmed --clients-confirmed --message-auth-confirmed --permissions-confirmed
+```
+
+Completion reruns live checks and requires completed imports, activation, quota, source forwarding and restored target access.
+The first completion and its immutable evidence snapshot are retained; later checks write a separate current report. Keep source
+forwarding and all recovery evidence until cached DNS routes expire. No command edits DNS or offers a general post-cutover rollback.
 
 ## Package layout
 
