@@ -26,6 +26,8 @@ This snapshot has not been validated end to end.
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
 | `select-source` | Select the source using live evidence and saved journals; recognize recorded target addresses after activation. |
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
+| `export-server` | Private shared PostfixAdmin configuration/schema and server-administrator export. |
+| `server-settings` | Review selections/exclusions, then apply or verify shared routes, relay credentials, sender rules and full-server administrators. |
 | `plan` | Account, source webmail and shared server assessments, quota calculations, policy decisions and initial target conflict checks. |
 | `accounts` | Preview account operations, or stage inactive accounts with explicit `--apply`; retain resumable operation receipts. |
 | `verify` | Read back account/recovery inventories; optionally compare stored mailbox hashes with the plan using `--passwords`. |
@@ -202,7 +204,39 @@ Export completion means the evidence was collected, not that it can be migrated.
 Account mapping, quota calculation and initial target checks are available through `plan`; full migration assessment remains pending.
 The inventory recheck does not establish that every source setting stayed unchanged throughout the export.
 Accounts, messages, mail-service configuration and Mailcow are
-not modified. RoundCube snapshots are collected separately by `roundcube-sessions`; shared-server preparation and full migration resume remain pending.
+not modified. RoundCube snapshots are collected separately by `roundcube-sessions`; full migration orchestration remains pending.
+
+## Shared server preparation
+
+For a PostfixAdmin source, complete shared preparation before domain account writes or source freezing:
+
+```bash
+mailcow-migrate export-server --config migration.json
+mailcow-migrate server-settings --config migration.json --export /root/mailcow-in-progress/exports/server/EXPORT_ID
+mailcow-migrate server-settings --config migration.json --export /root/mailcow-in-progress/exports/server/EXPORT_ID --action review
+mailcow-migrate server-settings --config migration.json --export /root/mailcow-in-progress/exports/server/EXPORT_ID --action apply --apply
+```
+
+Server export retains supported administrator schema/data, effective Postfix/Dovecot settings, maps, queue inventory and a private
+configuration archive. It changes no mail service. The default settings preview saves an inventory and selection under the private
+`global` workspace directory. Review records individual imports, explicit exclusions and any full-server administrator approvals.
+Unsupported required routes and missing evidence block continuation. Excluding an optional setting accepts a behavior difference
+and retains the current target configuration; it does not remove an existing rule.
+
+Supported imports are native recipient transports, the default outgoing relay and its archived credentials, exact external sender
+rejections, and individual-IP Postscreen exceptions. An IP exception bypasses Postscreen/RBL checks while keeping Rspamd and relay
+restrictions. Recipient routes and the default relay are separate choices. Credentials are read from one regular archive member
+into memory without extracting archive paths. New administrator passwords are generated privately; existing approved accounts
+retain their passwords and security settings. Keep other target configuration and administrator changes paused while applying.
+
+`--action apply --apply` affects shared target settings across hosted domains and may reload Postfix. All known target conflicts
+are checked before writes. API requests are journaled and uncertain results require readback; missing results are not resent.
+Changed files have private backups and effective/map checks. Failed configuration writes attempt rollback only while current
+values still match the operation; failed rollback retains a pending journal for reconciliation. Applied choices remain pinned.
+
+`--action check` verifies the selected target settings and approved administrator identities. Domain staging, freezing, transfers,
+activation and webmail import require this matching source/target receipt and fresh target readback. Plesk mail-domain migration
+does not import panel-wide policy through this PostfixAdmin preparation path.
 
 ## Account planning
 
@@ -286,8 +320,8 @@ Exit status 1 reports blockers or unresolved policy decisions; 0 means planning 
 **A completed plan is not migration approval.** `assessment.json` always records `migration_ready: false` in this version.
 `webmail-plan.json` records proposed source mappings and `target_verified: false`. Target Sieve compilation, SOGo capability
 and conflict checks, container timezone agreement and actual import verification remain pending. The shared-settings report
-records `target_verified: false` and `selection_recorded: false`: selection/exclusion review, relay credentials, server administrator
-privileges, shared-setting application and target verification remain pending. `transfer-plan.json` records the volume, vmail identity,
+records `target_verified: false` and `selection_recorded: false`: apply and verify the matching shared settings through `server-settings`.
+Its separate receipt records selections, exclusions, relay and administrator decisions. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
 Mail execution and webmail import are separate guarded commands. Full source isolation, DNS handoff and full migration resume remain pending.

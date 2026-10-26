@@ -185,9 +185,9 @@ def shared_settings_assessment(plan: Mapping[str, Any], exported: ExportEvidence
                             else "not-needed", "{} blockers, {} supported mappings, {} unsupported settings, {} informational settings. "
                             "Full server inventory and reasons are retained privately in shared-settings-plan.json.".format(
                                 counts["blocker"], counts["automatic"], counts["unsupported"], counts["adapted"])))
-        checks.append(check("shared-settings-application", "pending",
-                            "Shared setting selections, relay credentials, administrator privilege mapping, "
-                            "target writes and verification are not implemented yet; existing migration journals are not reconciled by planning"))
+        checks.append(check("shared-settings-application", "required",
+                            "Review/apply shared settings through server-settings; matching source/target receipts and live target readback "
+                            "are required before account writes, source freezing and activation"))
     else:
         checks = [check("global-baseline", "not-needed", "Shared PostfixAdmin settings are outside the Plesk mail-domain workflow")]
     sender_policy = sender_permission_check(evidence, policy)

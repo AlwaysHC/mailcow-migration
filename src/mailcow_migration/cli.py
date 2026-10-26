@@ -19,6 +19,8 @@ from .prefilters import run_prefilters
 from .quota import run_quota
 from .roundcube_sessions import run_roundcube_sessions
 from .senders import run_senders
+from .server_export import run_server_export
+from .server_settings import run_server_settings
 from .sogo_target import run_sogo_target
 from .sieve import run_sieve
 from .source_delivery import run_source_delivery
@@ -43,6 +45,8 @@ def parser() -> argparse.ArgumentParser:
         ("inspect", "Inspect source domain configuration, Maildirs and authoritative DNS without changing mail services"),
         ("select-source", "Select a source using DNS, saved batch identity and operation journals, including DNS handoff resume"),
         ("export", "Export private source configuration and account data without changing mail services"),
+        ("export-server", "Export shared PostfixAdmin configuration and administrator evidence without changing mail services"),
+        ("server-settings", "Review, apply or verify shared routes, relay credentials, sender rules and server administrator decisions"),
         ("plan", "Plan accounts and quotas from a completed export and inspect Mailcow without changing mail services"),
         ("accounts", "Preview or stage inactive accounts from a completed saved plan"),
         ("verify", "Verify account inventory against the saved plan and recorded activation phase"),
@@ -72,11 +76,14 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--plan", type=Path, metavar="FILE", help="Original saved plan, including older batches outside the discovery tree")
             command.add_argument("--record-target-addresses", action="store_true",
                                  help="After activation, save Mailcow addresses before changing DNS; requires --plan and root on the Mailcow host")
-        if name in ("plan", "sieve", "prefilters", "activate", "webmail"):
+        if name in ("plan", "sieve", "prefilters", "activate", "webmail", "server-settings"):
             command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
         if name == "plan":
             command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
             command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
+        if name == "server-settings":
+            command.add_argument("--action", choices=("preview", "review", "apply", "check"), default="preview")
+            command.add_argument("--apply", action="store_true", help="Required with action apply; selected shared settings affect all domains")
         if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "source-isolation",
                     "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "admins", "activate", "quota", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
@@ -160,6 +167,10 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             return run_source_selection(configuration, options.domain, plan=options.plan, record_target=options.record_target_addresses)
         elif options.command == "export":
             return run_export(configuration, options.domain)
+        elif options.command == "export-server":
+            return run_server_export(configuration)
+        elif options.command == "server-settings":
+            return run_server_settings(configuration, options.export, action=options.action, apply=options.apply)
         elif options.command == "plan":
             return run_plan(configuration, options.domain, options.export, options.out, options.quota_mib)
         elif options.command in ("accounts", "verify"):

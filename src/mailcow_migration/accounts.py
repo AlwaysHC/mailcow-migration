@@ -13,6 +13,7 @@ from .plans.forwarding import mailbox_forwardings
 from .plans.recovery import recovery_plan
 from .plans.saved import SavedPlan, load_saved_plan
 from .plans.security import account_security_policy
+from .plans.server_state import require_server_settings
 from .targets.account_inventory import DOMAIN_FIELDS, account_conflicts, account_inventory, domain_value, native_route_conflicts
 from .targets.mailcow import MailcowTarget
 from .targets.passwords import check_password_support, verify_mailbox_passwords, verify_target_password
@@ -280,6 +281,7 @@ def run_accounts(
                 raise MigrationError(message)
             print(message)
         if apply:
+            require_server_settings(batch, configuration)
             state = {**journal.read(), "policy_sha256": policy_fingerprint}
             if existing is not None and not state.get("existingDomain"):
                 state = {**state, "existingDomain": existing}

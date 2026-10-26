@@ -13,6 +13,7 @@ from .core.state import require_identity
 from .core.storage import local_path, read_json, write_private_json
 from .plans.recovery import recovery_plan
 from .plans.saved import SavedPlan
+from .plans.server_state import require_server_settings
 from .sources.isolation import check_source_holds
 from .sources.roundcube import roundcube_sessions
 from .targets.account_inventory import account_inventory
@@ -98,6 +99,7 @@ class TransferContext:
         return inventory
 
     def check_isolation(self, target: MailcowTarget) -> None:
+        require_server_settings(self.batch, self.configuration)
         findings = self.batch.blocking_findings
         if findings:
             raise MigrationError("Resolve saved planning findings before transfer:\n" + findings)

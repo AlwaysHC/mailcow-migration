@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any, Mapping, Tuple
 
+from . import SourceConnection
 from .inventory import DomainInventory, SourceInspection
 from .plesk import read_plesk
 from ..configuration import WORK_ROOT
@@ -17,7 +18,12 @@ def postfixadmin_locations(identifier: str) -> Mapping[str, str]:
 
 
 def postfixadmin_export(source: SourceInspection, domain: str, directory: Path, identifier: str) -> Tuple[str, ...]:
-    connection = source.connection
+    return postfixadmin_snapshot(source.connection, source.inventory.mail_root, domain, directory, identifier)
+
+
+def postfixadmin_snapshot(
+    connection: SourceConnection, root: str, scope: str, directory: Path, identifier: str,
+) -> Tuple[str, ...]:
     if connection.mysql_option_file is None:
         raise MigrationError("PostfixAdmin export requires a MySQL credentials file")
     locations = postfixadmin_locations(identifier)
@@ -30,8 +36,8 @@ def postfixadmin_export(source: SourceInspection, domain: str, directory: Path, 
     )
     connection.ssh.copy_to(helpers, locations["scripts"], directory / "upload-diagnostics.txt")
     connection.ssh.run(
-        ("env", "MAILCOW_WORK_ROOT=" + WORK_ROOT, "bash", locations["scripts"] + "/export-domain.sh", domain, locations["export"],
-         connection.mysql_option_file, "postfix", source.inventory.mail_root),
+        ("env", "MAILCOW_WORK_ROOT=" + WORK_ROOT, "bash", locations["scripts"] + "/export-domain.sh", scope, locations["export"],
+         connection.mysql_option_file, "postfix", root),
         timeout=3600, diagnostic_file=directory / "export-diagnostics.txt",
     )
     connection.ssh.copy_from(locations["export"], directory / "data", directory / "download-diagnostics.txt")
@@ -39,16 +45,18 @@ def postfixadmin_export(source: SourceInspection, domain: str, directory: Path, 
 
 
 def validate_postfixadmin_export(directory: Path, domain: str, root: str) -> None:
-    expected = {"COMPLETE": "complete", "domain.txt": domain, "scope.txt": "domain", "mail-root.txt": root}
+    server = domain == "--server"
+    expected = {"COMPLETE": "complete", "scope.txt": "server" if server else "domain",
+                **({} if server else {"domain.txt": domain, "mail-root.txt": root})}
     for name, value in expected.items():
         if read_text(directory / name, private=True).strip() != value:
             raise MigrationError("Downloaded PostfixAdmin export is incomplete or has a different domain/mail root")
     required = (
         "source-settings.sql", "postfix-version.txt", "dovecot-version.txt", "postfix-effective.conf", "postfix-services.conf",
         "dovecot-effective.conf", "postfix-queue.txt", "server-config.tgz", "row-counts.tsv", "dumped-row-count.txt",
-        "config/default.sieve", "config/inactive-sieve.files",
+        *(() if server else ("config/default.sieve", "config/inactive-sieve.files")),
     )
-    if any(not (directory / name).is_file() for name in required) or not (directory / "sieve").is_dir():
+    if any(not (directory / name).is_file() for name in required) or not server and not (directory / "sieve").is_dir():
         raise MigrationError("Downloaded PostfixAdmin export is missing required evidence")
     if not (directory / "source-settings.sql").stat().st_size or not (directory / "server-config.tgz").stat().st_size:
         raise MigrationError("Downloaded PostfixAdmin dump or configuration archive is empty")

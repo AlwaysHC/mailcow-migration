@@ -11,6 +11,7 @@ from .plans.evidence import load_plan_export
 from .plans.recovery import recovery_plan
 from .plans.saved import load_saved_plan
 from .plans.security import account_security_policy
+from .plans.server_state import require_server_settings
 from .plans.saved_webmail import load_saved_webmail
 from .senders import verify_senders
 from .targets.account_inventory import account_inventory
@@ -33,6 +34,7 @@ def run_activation(
         if batch.blocking_findings:
             raise MigrationError("Resolve saved planning findings before activation:\n" + batch.blocking_findings)
         context = TransferContext(batch, configuration)
+        require_server_settings(batch, configuration)
         evidence = load_plan_export(configuration, batch, exported)
         reviewed = load_saved_webmail(batch, evidence)
         if reviewed.blockers:

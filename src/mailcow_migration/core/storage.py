@@ -4,7 +4,7 @@ import os
 import stat
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from .errors import MigrationError
 
@@ -35,6 +35,13 @@ def read_text(path: Path, *, private: bool = False) -> str:
     if private and os.name == "posix" and metadata.st_mode & 0o077:
         raise MigrationError("File must have owner-only permissions: {} (use chmod 600)".format(file))
     return file.read_text(encoding="utf-8")
+
+
+def optional_text(path: Path) -> Optional[str]:
+    try:
+        return read_text(path)
+    except FileNotFoundError:
+        return None
 
 
 def unique_object(pairs: Iterable[Tuple[str, Any]]) -> Dict[str, Any]:

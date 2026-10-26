@@ -19,7 +19,7 @@ from .webmail_state import WebmailJournal
 from ..core.commands import CommandResult
 from ..core.errors import MigrationError
 from ..core.state import require_identity
-from ..core.storage import decode_json, json_fingerprint, local_path, read_json, read_text, write_atomic_text, write_private_json
+from ..core.storage import decode_json, json_fingerprint, local_path, optional_text, read_json, write_atomic_text, write_private_json
 from ..plans.saved import SavedPlan
 from ..resources import read_resource
 
@@ -28,13 +28,6 @@ HOLD = "error:4.3.2 Domain migration in progress"
 BEGIN, END = "# BEGIN migration delivery holds", "# END migration delivery holds"
 DELIVERY_BLOCK = re.compile(re.escape(BEGIN) + r"\n[\s\S]*?" + re.escape(END) + r"\n?")
 HOLD_LOOKUP = re.compile(r"regexp:/opt/postfix/conf/migration-hold-[a-f0-9]+")
-
-
-def optional_text(file: Path) -> Optional[str]:
-    try:
-        return read_text(file)
-    except FileNotFoundError:
-        return None
 
 
 def valid_switch(value: Any) -> bool:

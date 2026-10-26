@@ -7,6 +7,7 @@ from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
 from .plans.saved import load_saved_plan
+from .plans.server_state import require_server_settings
 from .sogo_target import sogo_preparation
 from .sources.delivery import HOLD, SourceDelivery
 from .sources.logins import SourceLogins
@@ -49,6 +50,7 @@ def run_source_delivery(configuration: Configuration, file: Path, *, action: str
                     print("Resolve these saved planning findings before pause:\n" + findings)
                 print("Preview finished; no source configuration or delivery journal was changed.")
             else:
+                require_server_settings(batch, configuration)
                 if batch.plan["mailboxes"]:
                     SourceLogins(batch).check()
                 sogo_preparation(configuration, batch).preflight()

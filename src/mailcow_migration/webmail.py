@@ -9,6 +9,7 @@ from .core.storage import json_fingerprint, local_path
 from .plans.evidence import load_plan_export
 from .plans.saved import load_saved_plan
 from .plans.saved_webmail import load_saved_webmail
+from .plans.server_state import require_server_settings
 from .senders import verify_senders
 from .sogo_target import sogo_preparation
 from .sources import SourceKind
@@ -66,6 +67,7 @@ def run_webmail(
         deferred = len(preparation.proposal["deferredPreferences"])
 
         def verify_ready() -> None:
+            require_server_settings(batch, configuration)
             context.final_state()
             inventory = context.check_accounts(target, activated=True)
             QuotaJournal(batch, configuration.mailcow).require_complete(target)

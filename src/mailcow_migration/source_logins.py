@@ -7,6 +7,7 @@ from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
 from .plans.saved import load_saved_plan
+from .plans.server_state import require_server_settings
 from .sogo_target import sogo_preparation
 from .sources.delivery import SourceDelivery
 from .sources.logins import SourceLogins, login_query
@@ -34,6 +35,7 @@ def run_source_logins(configuration: Configuration, file: Path, *, action: str =
             if findings and action == "freeze":
                 raise MigrationError("Resolve the saved planning findings before freezing source logins:\n" + findings)
             if action == "freeze":
+                require_server_settings(batch, configuration)
                 print("Checking source delivery prerequisites before changing logins...")
                 SourceDelivery(batch, configuration.mailcow.api).inspect()
                 roundcube_sessions(batch, configuration).preflight()

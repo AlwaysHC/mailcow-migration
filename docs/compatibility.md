@@ -44,7 +44,11 @@ rsync capability checks and read-only append previews. This does not authorize t
 It uses completed exports, parses source
 account data and calculates quotas from mailbox measurements. It also assesses source Sieve, vacation and forwarding mappings.
 PostfixAdmin planning assesses shared routing/policy maps and per-service sender restrictions from the exported configuration.
-It does not resume existing migration journals, verify shared-setting application or establish target webmail readiness.
+Shared application and readback use the separate `server-settings` workflow; planning itself does not change shared settings.
+`export-server` uses the same supported PostfixAdmin export tools with server scope. `server-settings` requires interactive selection
+review, the target API, Docker Compose/Postfix, and writable persistent target configuration for selected file changes.
+Relay credentials are read from the private archive; server administrator creation additionally needs native password readback.
+Unknown required routing semantics remain blockers. Shared choices, pending writes, backups and exclusions remain bound to the source and target.
 The `export` command additionally uses local `scp -O` for PostfixAdmin and the existing source Bash/MySQL dump/configuration
 utilities; Plesk export uses its root-only Python/CLI snapshot reader. Only the matching source is exported. Export success
 does not qualify account mappings or product versions. Export uses journal-aware source selection and blocks refresh after activation starts;

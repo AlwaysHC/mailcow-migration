@@ -13,10 +13,9 @@ from .saved import SavedPlan, validate_plan_inventory
 
 
 @dataclass(frozen=True)
-class ExportEvidence:
+class ExportFiles:
     directory: Path
     manifest: Mapping[str, Any]
-    source: SourceInspection
 
     @property
     def data(self) -> Path:
@@ -29,7 +28,12 @@ class ExportEvidence:
             raise MigrationError("Export files differ from their completion manifest; retain the export and investigate")
 
 
-def optional_export_text(evidence: ExportEvidence, *parts: str) -> Optional[str]:
+@dataclass(frozen=True)
+class ExportEvidence(ExportFiles):
+    source: SourceInspection
+
+
+def optional_export_text(evidence: ExportFiles, *parts: str) -> Optional[str]:
     file = local_path(evidence.data.joinpath(*parts))
     if evidence.data not in file.parents:
         raise MigrationError("Evidence must stay inside the source export")

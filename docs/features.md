@@ -52,9 +52,10 @@ Configuration generation is available in the current development version.
 - [ ] **Preserve:** Provide guided server preparation, domain migration, source prerequisite checks and SOGo capability checks.
   Add account provisioning, mail transfer, Sieve/SOGo settings, full assessment, administrator and sender-permission import,
   verification, activation and quota recalculation.
-- [ ] **Preserve:** Export source account/configuration inventories and record source identity without changing mail service.
+- [x] **Preserve:** Export source account/configuration inventories and record source identity without changing mail service.
   Inspect both schema and effective configuration; keep exports private.
-  Domain source exports and separate RoundCube snapshots are implemented; shared-server export and full schema/configuration assessment remain pending.
+  Domain exports, separate RoundCube snapshots and shared-server exports preserve the supported schemas, effective service settings,
+  maps and private archives. Server scope exports administrator data without selecting or changing a mail domain.
 - [x] **Preserve:** Select PostfixAdmin or Plesk using the existing live configuration, Maildir, and DNS evidence.
   Inspect only configured sources. Preserve saved connection settings, cutover-resume detection, and ambiguity checks.
   Shared selection checks primary and alias-domain routing, recorded activated target addresses and competing batch journals.
@@ -203,10 +204,12 @@ Configuration generation is available in the current development version.
   Classify complete map inventories, supported routes, relayhost, sender rejection, IP-whitelist adaptations and source blockers.
   Preserve domain relationships and shared dependencies; save source values and per-service findings privately.
   Plesk domain planning does not inherit the PostfixAdmin shared-setting import or fabricate missing sender evidence.
-- [ ] **Configure:** Review shared PostfixAdmin server settings before per-domain changes: supported transport routes,
+- [x] **Configure:** Review shared PostfixAdmin server settings before per-domain changes: supported transport routes,
   outgoing relay credentials, sender restrictions, individual-IP whitelist adaptations, and server administrators.
   Preserve explicit exclusions and explain semantic differences. Plesk mail-domain support does not imply importing all panel policy.
-  Source assessment is available; guided selections/exclusions, credentials, privilege decisions, application and target verification remain pending.
+  Interactive review records every selection/exclusion and explicit full-server administrator ownership/privilege approval.
+  Verify native routes and credential maps, preserve unrelated Postfix settings, retain backups and reconcile uncertain API writes.
+  File updates use guarded rollback; failed rollback remains pending. Domain writes/freezing/activation require matching verified shared receipts.
 - [ ] **Preserve:** Isolate source logins, submission, and delivery using the selected adapter; disconnect affected sessions
   and revoke webmail access while leaving unrelated domains operational.
   Plesk supports native preview/freeze/check/pre-activation release, Dovecot denial, SMTP/deferred delivery, worker draining,
