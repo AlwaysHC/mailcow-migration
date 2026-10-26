@@ -106,11 +106,12 @@ Configuration generation is available in the current development version.
   Target timezone agreement, import and verification remain pending. Prior autoresponder reply history is not transferred.
 - [ ] **Preserve:** Export RoundCube contacts, groups, identities, signatures, supported preferences, and folder display state
   for either source adapter. Import and verify SOGo data before restoring access; reject conflicting target settings.
-  Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available; target import remains pending.
+  Source snapshots, selected/ignored-profile inventories, file fingerprints and supported SOGo proposals are available.
+  Native import/readback is implemented internally; command integration and migration prerequisites remain pending.
 - [x] Map supported RoundCube vCards, collected recipients, identities, preferences and source folder display state into reviewable private proposals.
   Preserve stable record IDs, existing UIDs, defaults, unsupported-data blockers and source snapshot/folder drift checks.
   Record review of an unchanged proposal and explicit deferral of supported receipt/reply-folder preferences before source isolation.
-  Target configuration/conflict checks and folder-state assessment are available separately; actual import/readback remains pending.
+  Target configuration/conflict checks and folder-state assessment are available separately; import command integration remains pending.
 - [ ] **Configure:** Review SOGo settings needed for identities, forwarding, filters, and vacations before enabling them.
   Explain any effect on other domains. Unsupported preferences need an explicit, recorded decision.
   Target configuration preview/application for custom identity support is implemented, with explicit shared-restart scope,
@@ -124,7 +125,11 @@ Configuration generation is available in the current development version.
 - [x] Recheck source snapshots/folder trees and assess target folder display state during native user inspection.
   Require every source folder on the target, preserve SOGo identifier escaping and the collapsed/expanded mapping,
   and block conflicting primary-account selections while retaining unrelated Mail settings and other account identifiers.
-  Save proposed values privately; folder-setting writes, readback and import completion remain pending.
+  Save proposed values privately; the internal write/readback layer is separate from inspection and full import completion.
+- [x] Implement the native SOGo import backend for approved preferences, contacts and folder display state.
+  Preserve all-user conflict checks, private first backups, pending-write receipts, additive 50-contact chunks and native readback.
+  Reconcile interrupted writes and retain later edits after native completion. Require caller-provided source/readiness checks;
+  CLI integration, transfer/activation orchestration and the full webmail completion receipt remain pending.
 - [x] **Preserve:** Identify and revoke database-backed RoundCube sessions after verified PostfixAdmin login and delivery isolation.
   Preserve exact session ownership/value checks, draft confirmation, zero-session readback and unchanged user-data snapshots.
   Retain separate receipts and evidence; Plesk preview is available, while its revocation adapter remains pending.

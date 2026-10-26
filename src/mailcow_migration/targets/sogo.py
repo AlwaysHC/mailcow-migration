@@ -1,12 +1,13 @@
 import json
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Iterator, Mapping, Optional, Sequence
 from uuid import uuid4
 
 from .mailcow import MailcowTarget
-from .sogo_values import configuration_value, enabled
+from .sogo_values import configuration_value, enabled, property_list
 from ..core.errors import MigrationError
 from ..core.storage import decode_json, json_fingerprint, local_path, read_text, write_private_text
 from ..plans.roundcube_values import source_truth
@@ -117,12 +118,23 @@ class SogoTarget:
                       'if [ "$attempt" -gt 30 ]; then printf "%s\\n" '
                       '"SOGo startup timed out after 60 seconds; inspect its startup log." >&2; exit 1; fi; sleep 2; done'))
 
-    def backup(self, username: str) -> Mapping[str, Any]:
+    @contextmanager
+    def native_record(self, username: str, content: Optional[str] = None) -> Iterator[str]:
         require_username(username)
         folder = self.command(("mktemp", "-d", "/tmp/mailcow-contacts-XXXXXXXX")).strip()
         if not re.fullmatch(r"/tmp/mailcow-contacts-[a-zA-Z0-9]+", folder):
             raise MigrationError("Invalid SOGo temporary directory")
         try:
+            if content is not None:
+                self.command(("sh", "-c", 'umask 077; cat > "$1"', "sh", folder + "/" + username), input_text=content)
+            yield folder
+            self.command(("rm", "--", folder + "/" + username))
+            self.command(("rmdir", "--", folder))
+        except (MigrationError, OSError) as error:
+            raise MigrationError("{}\nRetain the private SOGo temporary directory in sogo-mailcow for recovery: {}".format(error, folder)) from error
+
+    def backup(self, username: str) -> Mapping[str, Any]:
+        with self.native_record(username) as folder:
             self.command(("sogo-tool", "backup", folder, username))
             raw = self.command(("cat", "--", folder + "/" + username))
             record = self.parse(raw)
@@ -133,11 +145,23 @@ class SogoTarget:
                 write_private_text(original, raw)
             else:
                 read_text(original, private=True)
-            self.command(("rm", "--", folder + "/" + username))
-            self.command(("rmdir", "--", folder))
             return record
-        except (MigrationError, OSError) as error:
-            raise MigrationError("{}\nRetain the private SOGo temporary directory in sogo-mailcow for recovery: {}".format(error, folder)) from error
+
+    def restore_contacts(self, username: str, book: str, records: Sequence[Mapping[str, str]]) -> None:
+        require_username(username)
+        if not re.fullmatch(r"roundcube-[a-f0-9]{24}", book):
+            raise MigrationError("Unsupported migration address-book identifier")
+        content = property_list({"tables": {"/Users/{}/Contacts/{}".format(username, book): {
+            "displayname": "Roundcube contacts", "acl": {}, "records": list(records),
+        }}})
+        with self.native_record(username, content) as folder:
+            self.command(("sogo-tool", "restore", "-f", "Contacts/" + book, folder, username))
+
+    def set_user_value(self, section: str, username: str, key: str, value: Any) -> None:
+        if section not in ("defaults", "settings") or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", key):
+            raise MigrationError("Unsupported SOGo preference section or key")
+        with self.native_record(username, json.dumps({key: value}, ensure_ascii=False, allow_nan=False)) as folder:
+            self.command(("sogo-tool", "user-preferences", "set", section, username, key, "-f", folder + "/" + username))
 
     def clear_unknown_user(self, username: str) -> str:
         require_username(username)

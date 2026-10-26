@@ -11,7 +11,8 @@ Target isolation and PostfixAdmin login and delivery controls are available sepa
 RoundCube snapshots, SOGo proposals and session previews support either source; revocation requires the PostfixAdmin isolation path.
 SOGo configuration preparation, native user-data conflict inspection and target folder-state assessment are available separately from import.
 Explicit SOGo user preparation can reload missing domain user sources and reconcile selected cached unknown-user lookups.
-Message transfer, webmail imports, full source isolation, activation and full recovery remain planned work.
+The native SOGo import backend is implemented internally, with no import command yet.
+Message transfer, integrated webmail imports, full source isolation, activation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
@@ -147,6 +148,12 @@ inside `dovecot-mailcow`. The supported personal namespace has an empty prefix a
 source folder must already exist on the target. SOGo backups must contain a user-settings dictionary, with a dictionary-valued
 `Mail` entry when present. `ExpandedFolders`, when present, must be an array or JSON-encoded array of supported account/folder
 identifiers with the expected primary-account selection. Folder checks establish display-state compatibility only.
+
+The internal import backend uses `sogo-tool user-preferences set` with a private JSON file for defaults/settings, and additive
+`sogo-tool restore -f` for address-book records. It requires the same native backup/conversion capabilities as inspection.
+Temporary files run as the `sogo` user with owner-only permissions; failures retain them for recovery. This backend has not
+been validated end to end and is not called by the current CLI. Its private native-completion receipt does not authorize
+access restoration; completed transfer/activation and full isolation/workflow integration remain required.
 
 | Container | Capabilities needed by planned migration workflows |
 | --- | --- |

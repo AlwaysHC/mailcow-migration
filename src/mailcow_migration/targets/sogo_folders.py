@@ -4,6 +4,7 @@ from typing import Any, Mapping, Optional
 from uuid import uuid4
 
 from .mailcow import MailcowTarget
+from .sogo_values import equal_values
 from ..core.errors import MigrationError
 from ..core.folders import folder_inventory
 from ..core.storage import decode_json, json_fingerprint, write_private_json
@@ -41,6 +42,7 @@ def mail_settings(backup: Mapping[str, Any], username: str) -> Mapping[str, Any]
 
 def inspect_folder_state(
     target: MailcowTarget, directory: Path, user: Mapping[str, Any], backup: Mapping[str, Any],
+    journal: Optional[Mapping[str, Any]] = None,
 ) -> Optional[Mapping[str, Any]]:
     plan = user["folderState"]
     if plan is None:
@@ -58,14 +60,20 @@ def inspect_folder_state(
         write_private_json(conflict, {**evidence, "missing": missing}, replace=True)
         raise MigrationError(username + ": source folders are missing on Mailcow: " + ", ".join(missing)
                              + ". Finish copying mail before folder-state inspection. Private comparison: " + str(conflict))
+    if journal is not None and (journal["source"] != plan["source"] or journal["expected"] != expected):
+        raise MigrationError(username + ": folder tree changed after import started; retain the import journal")
     mail = mail_settings(backup, username)
     present = "ExpandedFolders" in mail
     expanded = expanded_folders(mail["ExpandedFolders"]) if present else []
     actual = sorted({identifier for identifier in expanded if primary_folder(identifier)})
-    if present and actual != expected:
+    if (present and actual != expected) or (not present and journal is not None and journal["complete"]):
         write_private_json(conflict, {**evidence, "actual": actual, "present": present}, replace=True)
         raise MigrationError(username + ": existing SOGo folder expansion differs from the proposal; no overwrite performed. "
                              "Private comparison: " + str(conflict))
+    if journal is not None:
+        normalized = {**mail, "ExpandedFolders": sorted(set(expanded)) if present else journal["mail"]["ExpandedFolders"]}
+        if not equal_values(normalized, journal["mail"]):
+            raise MigrationError(username + ": SOGo Mail settings changed during folder-state import; retain the import journal")
     proposed = {**mail, "ExpandedFolders": sorted({*expected, *(identifier for identifier in expanded if not primary_folder(identifier))})}
     return {**evidence, "current_mail": mail, "proposed_mail": proposed, "write_required": not present,
             "target_verified": True, "import_complete": False}

@@ -346,8 +346,8 @@ through preview while retaining their session receipts and unchanged baseline. I
 
 Session completion is distinct from webmail-import completion: this journal retains `import_complete: false` and
 `source_isolated: false`, and cannot satisfy Mailcow's webmail-import release guard. Proposals retain `target_verified: false` and
-`import_complete: false`. SOGo target preparation and native conflict inspection are separate operations; actual import/readback, combined submission
-checks and migration readiness remain pending.
+`import_complete: false`. SOGo target preparation and native conflict inspection are separate operations; integrated import/readback,
+combined submission checks and migration readiness remain pending.
 
 ## SOGo target preparation
 
@@ -420,7 +420,27 @@ under isolation before a future import; this assessment is not an import receipt
 An existing destination address book without this application's import journal is a conflict, even if its contents appear to
 match. Native inspection never adopts that book or overwrites conflicting data. Read-only inspection reports missing user
 sources or failed lookups; the separate `prepare-users --apply` action can refresh sources and reconcile unknown-user caches.
-Configuration/user assessments retain `import_ready: false`; actual SOGo imports, final readback and activation remain pending.
+Configuration/user assessments retain `import_ready: false`; the import command and activation workflow remain pending.
+
+### Native import backend
+
+The internal SOGo importer now supports journaled preference, contact and folder-setting writes with native readback.
+It is not exposed by the CLI yet. Its caller must hold the shared workspace lock and provide live checks for completed mail
+transfer, activation and source/target isolation, plus source snapshot/folder verification. Connecting these checks to the
+full migration workflow remains pending; the preparation commands do not call the importer.
+
+The backend checks every selected user's existing data before importing any preferences or contacts. It retains the first
+private native backup and records each preference write before execution. Contact imports use stable record IDs, chunks of
+50 and additive `sogo-tool restore -f`; each chunk is read back before proceeding. A matching import journal is required to
+recognize an existing destination book. Conflicting data, changed metadata/sharing and unknown records block continuation.
+
+Folder-setting receipts preserve unrelated Mail settings and other accounts' identifiers. Source/target folder drift,
+changes during a partial import and disappearance of a completed setting block continuation. Interrupted writes are
+reconciled against fresh native backups; a completed native import retains subsequent target user edits.
+
+Native operations share private temporary-file handling, retaining files on failure and removing only the expected file
+and empty directory after success. The separate `sogo-target/native-import-state.json` records `native_complete` for this
+backend and retains `import_complete: false`. It cannot satisfy the full webmail-import or target-release guards.
 
 ## PostfixAdmin source logins
 
@@ -561,6 +581,7 @@ activated batch and full source isolation remain separate planned work. Isolatio
 | `source_delivery`, `sources.delivery`, `sources.php` | PostfixAdmin delivery holds, recipient identity routing, BCC filtering and queue safeguards. |
 | `roundcube_sessions`, `sources.roundcube` | Source webmail snapshots, session ownership, draft confirmation and revocation receipts. |
 | `sogo_target`, `targets.sogo`, `targets.sogo_preparation`, `targets.sogo_inventory`, `targets.sogo_folders` | SOGo configuration/user preparation, native backups and conflict inspection. |
+| `targets.sogo_import` | Internal journaled native preference/contact/folder import and readback; command/workflow integration is pending. |
 | `plans.roundcube`, `plans.roundcube_contacts`, `plans.roundcube_preferences`, `core.folders` | Reviewed SOGo proposals, source folder evidence and preserved blockers. |
 | `plans.sieve`, `plans.native_settings`, `plans.webmail` | Source Sieve conversion, vacation/forwarding proposals and webmail assessment. |
 | `plans.postfix`, `plans.global_settings`, `plans.senders` | Shared source settings, routing relationships and per-service sender-policy assessment. |
