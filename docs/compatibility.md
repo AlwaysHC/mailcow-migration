@@ -22,6 +22,9 @@ Domain administrator preview/import/check supports reviewed PostfixAdmin mapping
 Plesk import/isolation, full source isolation and full recovery remain planned work.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
+All operational CLI commands pass the same loader before dispatch; the wizard remains the file-creation path.
+Invalid configuration stops before remote work with status 2 and repair/`configure` guidance. Shared validation and defaults
+apply equally to the installed entry point and module invocation.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
 only to configured sources; an unconfigured server does not need to exist or be reachable.
 The `inspect` command uses local OpenSSH and `dig`, remote Bash/`hostname -I` and filesystem access, plus the PostfixAdmin

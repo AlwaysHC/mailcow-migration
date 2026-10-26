@@ -9,7 +9,7 @@ from .accounts import run_accounts
 from .admins import run_admins
 from .activation import run_activation
 from .configuration import load_configuration
-from .core.errors import MigrationError
+from .core.errors import ConfigurationError, MigrationError
 from .exporting import run_export
 from .inspection import run_inspection
 from .isolation import run_target_isolation
@@ -58,7 +58,8 @@ def parser() -> argparse.ArgumentParser:
         ("admins", "Preview, import or verify reviewed domain administrators while preserving existing memberships and security"),
     ):
         command = commands.add_parser(name, help=description, description=description)
-        command.add_argument("--config", type=Path, required=True, metavar="FILE", help="JSON configuration file")
+        command.add_argument("--config", type=Path, required=True, metavar="FILE",
+                             help="JSON configuration file; create one with mailcow-migrate configure --config FILE")
         if name in ("inspect", "export", "plan"):
             command.add_argument("domain", metavar="DOMAIN", help="Lowercase primary mail domain")
         if name == "inspect":
@@ -130,50 +131,53 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
     try:
         if options.command == "configure":
             configure(options.config)
-        elif options.command == "inspect":
-            return run_inspection(load_configuration(options.config), options.domain, options.output)
+            return 0
+        configuration = load_configuration(options.config)
+        if options.command == "inspect":
+            return run_inspection(configuration, options.domain, options.output)
         elif options.command == "export":
-            return run_export(load_configuration(options.config), options.domain)
+            return run_export(configuration, options.domain)
         elif options.command == "plan":
-            return run_plan(load_configuration(options.config), options.domain, options.export, options.out, options.quota_mib)
+            return run_plan(configuration, options.domain, options.export, options.out, options.quota_mib)
         elif options.command in ("accounts", "verify"):
-            return run_accounts(load_configuration(options.config), options.plan,
+            return run_accounts(configuration, options.plan,
                                 apply=options.command == "accounts" and options.apply, verify=options.command == "verify")
         elif options.command == "activate":
-            return run_activation(load_configuration(options.config), options.plan, options.export, apply=options.apply,
+            return run_activation(configuration, options.plan, options.export, apply=options.apply,
                                   ready=options.ready, writers_stopped=options.writers_stopped)
         elif options.command == "webmail":
-            return run_webmail(load_configuration(options.config), options.plan, options.export, apply=options.apply,
+            return run_webmail(configuration, options.plan, options.export, apply=options.apply,
                                writers_stopped=options.writers_stopped)
         elif options.command == "quota":
-            return run_quota(load_configuration(options.config), options.plan, apply=options.apply, writers_stopped=options.writers_stopped)
+            return run_quota(configuration, options.plan, apply=options.apply, writers_stopped=options.writers_stopped)
         elif options.command == "target-isolation":
-            return run_target_isolation(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
+            return run_target_isolation(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "source-logins":
-            return run_source_logins(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
+            return run_source_logins(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "source-delivery":
-            return run_source_delivery(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
+            return run_source_delivery(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "roundcube-sessions":
-            return run_roundcube_sessions(load_configuration(options.config), options.plan, action=options.action, apply=options.apply,
+            return run_roundcube_sessions(configuration, options.plan, action=options.action, apply=options.apply,
                                           directory=options.directory, drafts_saved=options.drafts_saved,
                                           reviewed=options.reviewed, accept_deferrals=options.accept_deferrals)
         elif options.command == "sogo-target":
-            return run_sogo_target(load_configuration(options.config), options.plan, action=options.action, apply=options.apply)
+            return run_sogo_target(configuration, options.plan, action=options.action, apply=options.apply)
         elif options.command == "mail":
-            return run_mail(load_configuration(options.config), options.plan, apply=options.apply,
+            return run_mail(configuration, options.plan, apply=options.apply,
                             final=options.final, writers_stopped=options.writers_stopped)
         elif options.command == "sieve":
-            return run_sieve(load_configuration(options.config), options.plan, options.export, apply=options.apply,
+            return run_sieve(configuration, options.plan, options.export, apply=options.apply,
                              use_default=options.use_default_sieve, replace=options.replace_sieve, writers_stopped=options.writers_stopped)
         elif options.command == "prefilters":
-            return run_prefilters(load_configuration(options.config), options.plan, options.export, apply=options.apply)
+            return run_prefilters(configuration, options.plan, options.export, apply=options.apply)
         elif options.command == "senders":
-            return run_senders(load_configuration(options.config), options.plan, apply=options.apply, check=options.check)
+            return run_senders(configuration, options.plan, apply=options.apply, check=options.check)
         elif options.command == "admins":
-            return run_admins(load_configuration(options.config), options.plan, apply=options.apply, check=options.check)
-        else:
-            load_configuration(options.config)
+            return run_admins(configuration, options.plan, apply=options.apply, check=options.check)
+        elif options.command == "check-config":
             print("Configuration is valid. Credential files and server connectivity have not been checked.")
+        else:
+            raise ConfigurationError("Unsupported command: " + options.command)
         return 0
     except MigrationError as error:
         logging.error("%s", error)

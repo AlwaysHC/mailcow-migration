@@ -23,9 +23,10 @@ Configuration generation is available in the current development version.
   Provide a shared resolver that preserves normalized source values and falls back per missing/null field to the configuration.
 - [x] Validate required values before saving. Write the file atomically with owner-only permissions;
   do not silently overwrite an existing configuration. Store credential-file references rather than secrets in the JSON.
-- [ ] Make all migration processes load the selected file through one shared loader. Missing or invalid configuration
+- [x] Make all migration processes load the selected file through one shared loader. Missing or invalid configuration
   must produce an actionable error directing the operator to `configure`; do not silently substitute embedded connections.
-  The shared loader and local `check-config` command exist; migration workflows still need to be connected.
+  Every operational command passes one configuration-loading gate before dispatch and receives the same validated immutable object.
+  Configuration generation remains separate so a new file can be created; missing/invalid files fail with the existing repair guidance.
 - [ ] Preserve existing domain-specific settings, policy decisions, and resume identity checks when resolving the configuration.
   Configuration supplies inputs; journals retain operation state. Editing the file must not silently retarget an unfinished batch.
   Saved-plan/configuration checks and account-journal identity are implemented; full workflow resume remains pending.

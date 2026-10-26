@@ -82,7 +82,11 @@ Only configured sources are candidates for inspection. Edit an existing configur
 run `check-config` to validate its structure and values. Validation does not contact servers or establish dependency,
 credential, or migration readiness. Server-side state is not changed by either command.
 
-All available workflows consume this configuration through the shared loader.
+Every operational command loads the selected file once through the shared loader before dispatch. Both the installed command
+and `python3 -m mailcow_migration` use this entry point. Missing, unreadable, malformed or invalid files stop before server work
+with configuration-error status 2 and guidance to correct the file or run `configure`; explicit source hosts and the Mailcow API
+origin are required. The `configure` command creates a new file without attempting to load it first. Existing defaults and
+saved-plan/journal identity checks continue to apply.
 
 Quarantine defaults live in `migration.quarantine_notification` (`never`, `hourly`, `daily`, `weekly`) and
 `migration.quarantine_category` (`add_header` for Junk folder, `reject` for rejected messages, `all` for both).
