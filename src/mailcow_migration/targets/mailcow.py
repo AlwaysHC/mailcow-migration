@@ -19,11 +19,19 @@ from ..core.storage import decode_json, read_text
 
 LOGGER = logging.getLogger("mailcow_migration")
 READ = object()
-TRANSIENT_CODES = {errno.ECONNRESET, errno.ECONNREFUSED, errno.EPIPE, errno.ETIMEDOUT, socket.EAI_AGAIN}
+TRANSIENT_CODES = {
+    errno.ECONNRESET,
+    errno.ECONNREFUSED,
+    errno.EPIPE,
+    errno.ETIMEDOUT,
+    socket.EAI_AGAIN,
+}
 
 
 class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+    def redirect_request(
+        self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str
+    ) -> None:
         return None
 
 
@@ -39,24 +47,42 @@ class MailcowApi:
             raise ConfigurationError("Mailcow API timeout must be positive")
 
     def inventory(self, kind: str) -> list:
-        rows = self.request("get/{}/all".format(kind))
+        rows = self.request(f"get/{kind}/all")
         if any(not isinstance(row, dict) for row in rows):
             raise ApiError("Invalid Mailcow inventory; contents omitted")
         return rows
 
-    def request(self, endpoint: str, payload: Any = READ, *, object_response: bool = False) -> Any:
-        if not re.fullmatch(r"[a-zA-Z0-9_@.+%/-]+", endpoint) or endpoint.startswith("/") or ".." in endpoint.split("/"):
+    def request(
+        self, endpoint: str, payload: Any = READ, *, object_response: bool = False
+    ) -> Any:
+        if (
+            not re.fullmatch(r"[a-zA-Z0-9_@.+%/-]+", endpoint)
+            or endpoint.startswith("/")
+            or ".." in endpoint.split("/")
+        ):
             raise ConfigurationError("Invalid Mailcow API endpoint")
         key = read_text(self.key_file, private=True).strip()
-        if not key or any(char.isspace() or ord(char) < 33 or ord(char) > 126 for char in key):
-            raise ConfigurationError("Invalid API key file; expected a single ASCII key")
+        if not key or any(
+            char.isspace() or ord(char) < 33 or ord(char) > 126 for char in key
+        ):
+            raise ConfigurationError(
+                "Invalid API key file; expected a single ASCII key"
+            )
         method = "GET" if payload is READ else "POST"
-        body = None if payload is READ else json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")
+        body = (
+            None
+            if payload is READ
+            else json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")
+        )
         request = Request(
-            self.origin.rstrip("/") + "/api/v1/" + endpoint, data=body, method=method,
+            self.origin.rstrip("/") + "/api/v1/" + endpoint,
+            data=body,
+            method=method,
             headers={"X-API-Key": key, "Content-Type": "application/json"},
         )
-        opener = build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
+        opener = build_opener(
+            NoRedirect(), HTTPSHandler(context=ssl.create_default_context())
+        )
         attempt = 1
         while True:
             try:
@@ -66,45 +92,92 @@ class MailcowApi:
             except HTTPError as error:
                 failure = ApiError(
                     "Mailcow API {} returned HTTP {}{}".format(
-                        method, error.code, "; check API key permissions and allowed source IP" if error.code in (401, 403) else ""
-                    ), uncertain=method == "POST", transient=error.code in (502, 503, 504),
+                        method,
+                        error.code,
+                        "; check API key permissions and allowed source IP"
+                        if error.code in (401, 403)
+                        else "",
+                    ),
+                    uncertain=method == "POST",
+                    transient=error.code in (502, 503, 504),
                 )
                 error.close()
             except (ValueError, UnicodeError):
-                failure = ApiError("Mailcow API returned invalid JSON; body omitted", uncertain=method == "POST")
+                failure = ApiError(
+                    "Mailcow API returned invalid JSON; body omitted",
+                    uncertain=method == "POST",
+                )
             except (URLError, OSError, HTTPException) as error:
                 reason = error.reason if isinstance(error, URLError) else error
                 failure = ApiError(
-                    "Mailcow API connection failed ({})".format(type(reason).__name__), uncertain=method == "POST",
-                    transient=isinstance(reason, (TimeoutError, ConnectionError, HTTPException))
+                    f"Mailcow API connection failed ({type(reason).__name__})",
+                    uncertain=method == "POST",
+                    transient=isinstance(
+                        reason, (TimeoutError, ConnectionError, HTTPException)
+                    )
                     or getattr(reason, "errno", None) in TRANSIENT_CODES,
                 )
             if failure.uncertain:
                 raise ApiError(
-                    "{}. The write may have reached Mailcow; reconcile the saved journal before retrying".format(failure), uncertain=True
+                    f"{failure}. The write may have reached Mailcow; reconcile the saved journal before retrying",
+                    uncertain=True,
                 ) from failure
             if not failure.transient or attempt == 3:
                 raise failure
-            LOGGER.warning("%s; retrying read in %s second(s), attempt %s/3", failure, attempt, attempt + 1)
+            LOGGER.warning(
+                "%s; retrying read in %s second(s), attempt %s/3",
+                failure,
+                attempt,
+                attempt + 1,
+            )
             time.sleep(attempt)
             attempt += 1
         if payload is not READ:
             entries = result if isinstance(result, list) else [result]
-            if not entries or any(not isinstance(item, dict) or item.get("type") != "success" for item in entries):
+            if not entries or any(
+                not isinstance(item, dict) or item.get("type") != "success"
+                for item in entries
+            ):
                 codes = []
                 for item in entries:
                     if isinstance(item, dict) and item.get("type") != "success":
                         message = item.get("msg")
-                        code = message[0] if isinstance(message, list) and message else message
-                        code = code if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_-]*", code, re.I) else "rejected"
-                        values = payload.get("attr", payload) if isinstance(payload, dict) else {}
+                        code = (
+                            message[0]
+                            if isinstance(message, list) and message
+                            else message
+                        )
+                        code = (
+                            code
+                            if isinstance(code, str)
+                            and re.fullmatch(r"[a-z][a-z0-9_-]*", code, re.IGNORECASE)
+                            else "rejected"
+                        )
+                        values = (
+                            payload.get("attr", payload)
+                            if isinstance(payload, dict)
+                            else {}
+                        )
                         values = values if isinstance(values, dict) else {}
-                        codes.append(redact(code, (key, *(value for name, value in values.items()
-                                                        if name in ("password", "password2") and isinstance(value, str)))))
+                        codes.append(
+                            redact(
+                                code,
+                                (
+                                    key,
+                                    *(
+                                        value
+                                        for name, value in values.items()
+                                        if name in ("password", "password2")
+                                        and isinstance(value, str)
+                                    ),
+                                ),
+                            )
+                        )
                 raise ApiError(
                     "Mailcow API did not report success ({}); retain the journal and inspect the target".format(
                         ", ".join(codes) or "empty or invalid response"
-                    ), uncertain=True,
+                    ),
+                    uncertain=True,
                 )
         elif not isinstance(result, list):
             if object_response and isinstance(result, dict):
@@ -123,32 +196,65 @@ class MailcowTarget:
     def api(self) -> MailcowApi:
         return MailcowApi(self.settings.api, Path(self.settings.api_key_file))
 
-    def compose_environment(self, services: Sequence[str], names: Sequence[str]) -> Mapping[str, Mapping[str, str]]:
+    def compose_environment(
+        self, services: Sequence[str], names: Sequence[str]
+    ) -> Mapping[str, Mapping[str, str]]:
         try:
             document = decode_json(self.compose(("config", "--format", "json")).stdout)
         except ValueError as error:
-            raise MigrationError("Invalid Mailcow Compose configuration; environment contents omitted") from error
-        if not isinstance(document, dict) or not isinstance(document.get("services"), dict):
-            raise MigrationError("Mailcow Compose configuration has no service inventory")
+            raise MigrationError(
+                "Invalid Mailcow Compose configuration; environment contents omitted"
+            ) from error
+        if not isinstance(document, dict) or not isinstance(
+            document.get("services"), dict
+        ):
+            raise MigrationError(
+                "Mailcow Compose configuration has no service inventory"
+            )
         result = {}
         for name in services:
             service = document["services"].get(name)
-            environment = service.get("environment") if isinstance(service, dict) else None
+            environment = (
+                service.get("environment") if isinstance(service, dict) else None
+            )
             if not isinstance(environment, dict):
-                raise MigrationError("Mailcow Compose service has no environment: " + name)
+                raise MigrationError(
+                    "Mailcow Compose service has no environment: " + name
+                )
             selected = {key: environment.get(key) or "" for key in names}
             if any(not isinstance(value, str) for value in selected.values()):
-                raise MigrationError("Unsupported Mailcow Compose environment values; contents omitted")
+                raise MigrationError(
+                    "Unsupported Mailcow Compose environment values; contents omitted"
+                )
             result[name] = selected
         return result
 
     def compose(
-        self, arguments: Sequence[str], *, input_text: Optional[str] = None, timeout: Optional[float] = 120, private_output: bool = True,
-        diagnostic_file: Optional[Path] = None, allowed_codes: Sequence[int] = (0,), inherit_output: bool = False,
+        self,
+        arguments: Sequence[str],
+        *,
+        input_text: Optional[str] = None,
+        timeout: Optional[float] = 120,
+        private_output: bool = True,
+        diagnostic_file: Optional[Path] = None,
+        allowed_codes: Sequence[int] = (0,),
+        inherit_output: bool = False,
         secrets: Sequence[str] = (),
     ) -> CommandResult:
         return run_command(
-            ("docker", "compose", "--project-directory", self.settings.directory, *arguments),
-            input_text=input_text, timeout=timeout, private_output=private_output, label="Mailcow Docker Compose",
-            diagnostic_file=diagnostic_file, allowed_codes=allowed_codes, inherit_output=inherit_output, secrets=secrets,
+            (
+                "docker",
+                "compose",
+                "--project-directory",
+                self.settings.directory,
+                *arguments,
+            ),
+            input_text=input_text,
+            timeout=timeout,
+            private_output=private_output,
+            label="Mailcow Docker Compose",
+            diagnostic_file=diagnostic_file,
+            allowed_codes=allowed_codes,
+            inherit_output=inherit_output,
+            secrets=secrets,
         )

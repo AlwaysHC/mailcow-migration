@@ -14,26 +14,52 @@ from .targets.sogo import SogoTarget, missing_user_sources
 from .targets.sogo_preparation import SogoPreparation
 
 
-def sogo_preparation(configuration: Configuration, batch: SavedPlan, *, verify_source: bool = False) -> SogoPreparation:
+def sogo_preparation(
+    configuration: Configuration, batch: SavedPlan, *, verify_source: bool = False
+) -> SogoPreparation:
     sessions = roundcube_sessions(batch, configuration)
     record = sessions.approved_record()
     if verify_source:
         sessions.check_source(record)
     proposal = sessions.proposal(record)
     directory = local_path(batch.directory / "sogo-target")
-    return SogoPreparation(SogoTarget(MailcowTarget(configuration.mailcow), directory), batch, proposal)
+    return SogoPreparation(
+        SogoTarget(MailcowTarget(configuration.mailcow), directory), batch, proposal
+    )
 
 
-def run_sogo_target(configuration: Configuration, file: Path, *, action: str = "preview", apply: bool = False) -> int:
+def run_sogo_target(
+    configuration: Configuration,
+    file: Path,
+    *,
+    action: str = "preview",
+    apply: bool = False,
+) -> int:
     if sys.platform != "linux" or os.geteuid() != 0:
-        raise ConfigurationError("Run SOGo target preparation on the Linux Mailcow host as root")
-    if action not in ("preview", "configure", "check", "inspect-users", "prepare-users") or apply != (action in ("configure", "prepare-users")):
-        raise ConfigurationError("Use --apply with configure or prepare-users; other SOGo target actions are read-only")
+        raise ConfigurationError(
+            "Run SOGo target preparation on the Linux Mailcow host as root"
+        )
+    if action not in (
+        "preview",
+        "configure",
+        "check",
+        "inspect-users",
+        "prepare-users",
+    ) or apply != (action in ("configure", "prepare-users")):
+        raise ConfigurationError(
+            "Use --apply with configure or prepare-users; other SOGo target actions are read-only"
+        )
     with Workspace().lock():
         batch = load_saved_plan(file, configuration)
         if apply and account_journal(batch, configuration).read().get("pending"):
-            raise MigrationError("Reconcile the uncertain target account request before changing SOGo configuration or user lookups")
-        prepared = sogo_preparation(configuration, batch, verify_source=action in ("inspect-users", "prepare-users"))
+            raise MigrationError(
+                "Reconcile the uncertain target account request before changing SOGo configuration or user lookups"
+            )
+        prepared = sogo_preparation(
+            configuration,
+            batch,
+            verify_source=action in ("inspect-users", "prepare-users"),
+        )
         if action == "preview":
             report = prepared.preview()
             for blocker in report.get("blockers", []):
@@ -44,8 +70,14 @@ def run_sogo_target(configuration: Configuration, file: Path, *, action: str = "
         if action == "configure":
             prepared.configure()
         config = prepared.preflight()
-        print("Required SOGo tools, property-list conversion and effective identity settings passed checks.")
+        print(
+            "Required SOGo tools, property-list conversion and effective identity settings passed checks."
+        )
         if missing_user_sources(prepared.users, config):
-            print("Domain user sources are not loaded yet; prepare-users --apply can refresh them with a shared SOGo restart.")
-        print("Use inspect-users for native data/folder checks, then webmail for guarded import after activation.")
+            print(
+                "Domain user sources are not loaded yet; prepare-users --apply can refresh them with a shared SOGo restart."
+            )
+        print(
+            "Use inspect-users for native data/folder checks, then webmail for guarded import after activation."
+        )
     return 0

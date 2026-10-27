@@ -9,7 +9,7 @@ def read_resource(name: str) -> str:
         raise MigrationError("Invalid bundled resource name")
     data = pkgutil.get_data(__name__, name)
     if data is None:
-        raise MigrationError("Bundled resource was not found: {}".format(name))
+        raise MigrationError(f"Bundled resource was not found: {name}")
     return data.decode("utf-8").replace("\r\n", "\n")
 
 

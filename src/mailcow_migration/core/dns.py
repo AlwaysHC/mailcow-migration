@@ -31,7 +31,9 @@ class MxEvidence:
 
     @property
     def ips(self) -> Tuple[str, ...]:
-        return tuple(sorted({address for record in self.records for address in record.ips}))
+        return tuple(
+            sorted({address for record in self.records for address in record.ips})
+        )
 
 
 def normalized_ip(value: str, version: Optional[int] = None) -> str:
@@ -48,38 +50,65 @@ def hostname(value: str) -> str:
     try:
         return domain_name(value[:-1].lower() if value.endswith(".") else value.lower())
     except ConfigurationError as error:
-        raise MigrationError("DNS response contains an invalid hostname; explicit mail hosts are required") from error
+        raise MigrationError(
+            "DNS response contains an invalid hostname; explicit mail hosts are required"
+        ) from error
 
 
 def record_name(value: str) -> str:
-    if (not isinstance(value, str) or len(value) > 253 or "." not in value
-            or any(not re.fullmatch(r"[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?", label) for label in value.split("."))):
+    if (
+        not isinstance(value, str)
+        or len(value) > 253
+        or "." not in value
+        or any(
+            not re.fullmatch(r"[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?", label)
+            for label in value.split(".")
+        )
+    ):
         raise ConfigurationError("Use a lowercase fully qualified DNS record name")
     return value
 
 
-def query(name: str, kind: str, server: Optional[str] = None, *, allow_missing: bool = False) -> Tuple[DnsRecord, ...]:
+def query(
+    name: str, kind: str, server: Optional[str] = None, *, allow_missing: bool = False
+) -> Tuple[DnsRecord, ...]:
     record_name(name)
     if kind not in ("NS", "MX", "A", "AAAA", "TXT", "CNAME"):
         raise MigrationError("Unsupported DNS query type")
     destination = ("@" + domain_name(server), "+norecurse") if server else ()
     output = run_command(
-        ("dig", *destination, name, kind, "+noall", "+answer", "+comments", "+time=5", "+tries=1"),
-        timeout=30, label="DNS {} query for {}".format(kind, name), private_output=False,
+        (
+            "dig",
+            *destination,
+            name,
+            kind,
+            "+noall",
+            "+answer",
+            "+comments",
+            "+time=5",
+            "+tries=1",
+        ),
+        timeout=30,
+        label=f"DNS {kind} query for {name}",
+        private_output=False,
     ).stdout
     if server and not re.search(r"flags: [^;]*\baa\b", output):
-        raise MigrationError("DNS answer is not authoritative for {} at {}".format(name, server))
+        raise MigrationError(f"DNS answer is not authoritative for {name} at {server}")
     if allow_missing and re.search(r"status: NXDOMAIN\b", output):
         return ()
     if not re.search(r"status: NOERROR\b", output):
-        raise MigrationError("DNS {} query failed for {} at {}".format(kind, name, server or "the configured resolver"))
+        raise MigrationError(
+            "DNS {} query failed for {} at {}".format(
+                kind, name, server or "the configured resolver"
+            )
+        )
     records = []
     for line in output.splitlines():
         if not line.strip() or line.lstrip().startswith(";"):
             continue
         parts = line.split()
         if len(parts) < 5 or not re.fullmatch(r"[0-9]+", parts[1]) or parts[2] != "IN":
-            raise MigrationError("Cannot interpret DNS answer for {}".format(name))
+            raise MigrationError(f"Cannot interpret DNS answer for {name}")
         owner = parts[0].lower().rstrip(".")
         if owner == name and parts[3] in (kind, "CNAME"):
             records.append(DnsRecord(owner, parts[3], tuple(parts[4:]), int(parts[1])))
@@ -91,21 +120,41 @@ def nameservers(name: str) -> Tuple[str, ...]:
     while "." in zone:
         records = query(zone, "NS", allow_missing=True)
         if records:
-            if any(record.kind != "NS" or len(record.values) != 1 for record in records):
-                raise MigrationError("Invalid nameserver inventory for {}".format(zone))
+            if any(
+                record.kind != "NS" or len(record.values) != 1 for record in records
+            ):
+                raise MigrationError(f"Invalid nameserver inventory for {zone}")
             return tuple(sorted({hostname(record.values[0]) for record in records}))
         zone = zone.split(".", 1)[1]
-    raise MigrationError("No authoritative nameservers found for {}".format(name))
+    raise MigrationError(f"No authoritative nameservers found for {name}")
 
 
-def agreed_records(name: str, kind: str, *, allow_missing: bool = False) -> Tuple[DnsRecord, ...]:
-    answers = tuple(query(name, kind, server, allow_missing=allow_missing) for server in nameservers(name))
+def agreed_records(
+    name: str, kind: str, *, allow_missing: bool = False
+) -> Tuple[DnsRecord, ...]:
+    answers = tuple(
+        query(name, kind, server, allow_missing=allow_missing)
+        for server in nameservers(name)
+    )
     signatures = {
-        tuple(sorted((record.kind, tuple(value if record.kind == "TXT" else value.lower() for value in record.values)) for record in answer))
+        tuple(
+            sorted(
+                (
+                    record.kind,
+                    tuple(
+                        value if record.kind == "TXT" else value.lower()
+                        for value in record.values
+                    ),
+                )
+                for record in answer
+            )
+        )
         for answer in answers
     }
     if len(signatures) != 1:
-        raise MigrationError("Authoritative nameservers disagree on {} for {}; wait for DNS to agree".format(kind, name))
+        raise MigrationError(
+            f"Authoritative nameservers disagree on {kind} for {name}; wait for DNS to agree"
+        )
     return answers[0]
 
 
@@ -142,21 +191,47 @@ def text_records(name: str, *, follow_aliases: bool = True) -> Tuple[str, ...]:
 def authoritative_addresses(name: str) -> Tuple[str, ...]:
     records = (*agreed_records(name, "A"), *agreed_records(name, "AAAA"))
     if any(record.kind == "CNAME" for record in records):
-        raise MigrationError("MX destination {} is a CNAME; source detection is ambiguous".format(name))
+        raise MigrationError(
+            f"MX destination {name} is a CNAME; source detection is ambiguous"
+        )
     if not records or any(len(record.values) != 1 for record in records):
-        raise MigrationError("MX destination {} has no valid authoritative A/AAAA addresses".format(name))
-    return tuple(sorted({normalized_ip(record.values[0], 4 if record.kind == "A" else 6) for record in records}))
+        raise MigrationError(
+            f"MX destination {name} has no valid authoritative A/AAAA addresses"
+        )
+    return tuple(
+        sorted(
+            {
+                normalized_ip(record.values[0], 4 if record.kind == "A" else 6)
+                for record in records
+            }
+        )
+    )
 
 
 def source_mx(domain: str) -> MxEvidence:
     records = agreed_records(domain, "MX")
     if not records or any(
-        record.kind != "MX" or len(record.values) != 2 or not re.fullmatch(r"[0-9]+", record.values[0])
+        record.kind != "MX"
+        or len(record.values) != 2
+        or not re.fullmatch(r"[0-9]+", record.values[0])
         for record in records
     ):
-        raise MigrationError("{} requires explicit MX records with valid mail hosts; no source was guessed".format(domain))
-    destinations = tuple((int(record.values[0]), hostname(record.values[1])) for record in records)
+        raise MigrationError(
+            f"{domain} requires explicit MX records with valid mail hosts; no source was guessed"
+        )
+    destinations = tuple(
+        (int(record.values[0]), hostname(record.values[1])) for record in records
+    )
     if any(priority > 65535 for priority, _ in destinations):
-        raise MigrationError("Invalid MX priority for {}".format(domain))
-    addresses = {exchange: authoritative_addresses(exchange) for exchange in dict.fromkeys(exchange for _, exchange in destinations)}
-    return MxEvidence(domain, tuple(MxRecord(priority, exchange, addresses[exchange]) for priority, exchange in sorted(destinations)))
+        raise MigrationError(f"Invalid MX priority for {domain}")
+    addresses = {
+        exchange: authoritative_addresses(exchange)
+        for exchange in dict.fromkeys(exchange for _, exchange in destinations)
+    }
+    return MxEvidence(
+        domain,
+        tuple(
+            MxRecord(priority, exchange, addresses[exchange])
+            for priority, exchange in sorted(destinations)
+        ),
+    )

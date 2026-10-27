@@ -6,203 +6,600 @@ from typing import Optional, Sequence
 
 from . import __version__
 from .accounts import run_accounts
-from .admins import run_admins
 from .activation import run_activation
+from .admins import run_admins
 from .assessment import run_assessment
 from .certificates import run_certificate
 from .configuration import load_configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.prompts import WorkflowPaused
 from .exporting import run_export
-from .inspection import run_inspection
 from .handoff import run_handoff
+from .inspection import run_inspection
 from .isolation import run_target_isolation
 from .mail import run_mail
 from .planning import run_plan
-from .preparation import run_preparation
 from .prefilters import run_prefilters
+from .preparation import run_preparation
 from .quota import run_quota
 from .roundcube_sessions import run_roundcube_sessions
 from .senders import run_senders
 from .server_export import run_server_export
 from .server_settings import run_server_settings
+from .sieve import run_sieve
 from .signing import run_signing
 from .sogo_target import run_sogo_target
-from .sieve import run_sieve
 from .source_delivery import run_source_delivery
-from .source_isolation import run_source_isolation
 from .source_forwarding import run_source_forwarding
+from .source_isolation import run_source_isolation
 from .source_logins import run_source_logins
 from .source_selection import run_source_selection
 from .webmail import run_webmail
 from .wizard import configure
 from .workflow import run_migration
 
+logger = logging.getLogger(__name__)
+
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        prog="mailcow-migrate", description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
+        prog="mailcow-migrate",
+        description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
         epilog="Use prepare --guided for server preparation and migrate DOMAIN for the guided domain workflow. "
-               "Explicit component commands remain available for review, guarded changes and recovery.",
+        "Explicit component commands remain available for review, guarded changes and recovery.",
     )
-    result.add_argument("--version", action="version", version="%(prog)s " + __version__)
+    result.add_argument(
+        "--version", action="version", version="%(prog)s " + __version__
+    )
     commands = result.add_subparsers(dest="command", required=True)
     for name, description in (
         ("configure", "Generate configuration interactively on the Linux Mailcow host"),
-        ("check-config", "Validate a configuration file locally without contacting servers"),
-        ("prepare", "Check configured source/target prerequisites; optionally guide shared server preparation"),
-        ("migrate", "Guide a domain through reviewed planning, isolation, import, activation and verified handoff"),
-        ("assess", "Gather phase-specific migration findings without changing source or target mail services"),
-        ("inspect", "Inspect source domain configuration, Maildirs and authoritative DNS without changing mail services"),
-        ("select-source", "Select a source using DNS, saved batch identity and operation journals, including DNS handoff resume"),
-        ("export", "Export private source configuration and account data without changing mail services"),
-        ("export-server", "Export shared PostfixAdmin configuration and administrator evidence without changing mail services"),
-        ("server-settings", "Review, apply or verify shared routes, relay credentials, sender rules and server administrator decisions"),
-        ("plan", "Plan accounts and quotas from a completed export and inspect Mailcow without changing mail services"),
+        (
+            "check-config",
+            "Validate a configuration file locally without contacting servers",
+        ),
+        (
+            "prepare",
+            "Check configured source/target prerequisites; optionally guide shared server preparation",
+        ),
+        (
+            "migrate",
+            "Guide a domain through reviewed planning, isolation, import, activation and verified handoff",
+        ),
+        (
+            "assess",
+            "Gather phase-specific migration findings without changing source or target mail services",
+        ),
+        (
+            "inspect",
+            "Inspect source domain configuration, Maildirs and authoritative DNS without changing mail services",
+        ),
+        (
+            "select-source",
+            "Select a source using DNS, saved batch identity and operation journals, including DNS handoff resume",
+        ),
+        (
+            "export",
+            "Export private source configuration and account data without changing mail services",
+        ),
+        (
+            "export-server",
+            "Export shared PostfixAdmin configuration and administrator evidence without changing mail services",
+        ),
+        (
+            "server-settings",
+            "Review, apply or verify shared routes, relay credentials, sender rules and server administrator decisions",
+        ),
+        (
+            "plan",
+            "Plan accounts and quotas from a completed export and inspect Mailcow without changing mail services",
+        ),
         ("accounts", "Preview or stage inactive accounts from a completed saved plan"),
-        ("verify", "Verify account inventory against the saved plan and recorded activation phase"),
-        ("activate", "Restore planned account activity under verified isolation after final mail, Sieve and filter checks"),
-        ("quota", "Preview or recalculate quota for planned active mailboxes after activation, retaining isolation"),
-        ("webmail", "Preview or import approved RoundCube data, editable filters and native settings while retaining isolation"),
-        ("target-isolation", "Preview, pause or check batch access and writers on Mailcow; retain guarded restoration state"),
-        ("source-logins", "Preview, freeze, check or release PostfixAdmin batch logins while preserving other query exclusions"),
-        ("source-delivery", "Preview, pause or check PostfixAdmin delivery, recipient routing and RoundCube sessions"),
-        ("source-isolation", "Preview, freeze, check or release Plesk logins, submission and delivery with saved recovery state"),
-        ("source-forward", "Preview or apply per-domain forwarding after completed import and target restoration"),
-        ("certificate", "Preview, request or verify the mail hostname certificate across all five TLS client endpoints"),
-        ("signing", "Select Mailcow or provider DKIM and preview or apply missing-key generation and domain relay assignment"),
-        ("handoff", "Guide DNS/client checks, verify TLS/MX/signing/queues and record completion only after operator confirmations"),
-        ("roundcube-sessions", "Preview RoundCube user data and batch sessions; revoke or check sessions under verified source isolation"),
-        ("sogo-target", "Preview or configure required SOGo settings and inspect existing user-data conflicts"),
-        ("mail", "Preview or append source Maildirs under verified isolation; preserve existing target files"),
-        ("sieve", "Preview or install exported personal/default Sieve with explicit replacement, backups and compilation"),
-        ("prefilters", "Preview or stage inactive forwarding/vacation prefilters from the saved webmail plan"),
-        ("senders", "Preview, merge or verify explicitly reviewed sender permissions while preserving existing grants"),
-        ("admins", "Preview, import or verify reviewed domain administrators while preserving existing memberships and security"),
+        (
+            "verify",
+            "Verify account inventory against the saved plan and recorded activation phase",
+        ),
+        (
+            "activate",
+            "Restore planned account activity under verified isolation after final mail, Sieve and filter checks",
+        ),
+        (
+            "quota",
+            "Preview or recalculate quota for planned active mailboxes after activation, retaining isolation",
+        ),
+        (
+            "webmail",
+            "Preview or import approved RoundCube data, editable filters and native settings while retaining isolation",
+        ),
+        (
+            "target-isolation",
+            "Preview, pause or check batch access and writers on Mailcow; retain guarded restoration state",
+        ),
+        (
+            "source-logins",
+            "Preview, freeze, check or release PostfixAdmin batch logins while preserving other query exclusions",
+        ),
+        (
+            "source-delivery",
+            "Preview, pause or check PostfixAdmin delivery, recipient routing and RoundCube sessions",
+        ),
+        (
+            "source-isolation",
+            "Preview, freeze, check or release Plesk logins, submission and delivery with saved recovery state",
+        ),
+        (
+            "source-forward",
+            "Preview or apply per-domain forwarding after completed import and target restoration",
+        ),
+        (
+            "certificate",
+            "Preview, request or verify the mail hostname certificate across all five TLS client endpoints",
+        ),
+        (
+            "signing",
+            "Select Mailcow or provider DKIM and preview or apply missing-key generation and domain relay assignment",
+        ),
+        (
+            "handoff",
+            "Guide DNS/client checks, verify TLS/MX/signing/queues and record completion only after operator confirmations",
+        ),
+        (
+            "roundcube-sessions",
+            "Preview RoundCube user data and batch sessions; revoke or check sessions under verified source isolation",
+        ),
+        (
+            "sogo-target",
+            "Preview or configure required SOGo settings and inspect existing user-data conflicts",
+        ),
+        (
+            "mail",
+            "Preview or append source Maildirs under verified isolation; preserve existing target files",
+        ),
+        (
+            "sieve",
+            "Preview or install exported personal/default Sieve with explicit replacement, backups and compilation",
+        ),
+        (
+            "prefilters",
+            "Preview or stage inactive forwarding/vacation prefilters from the saved webmail plan",
+        ),
+        (
+            "senders",
+            "Preview, merge or verify explicitly reviewed sender permissions while preserving existing grants",
+        ),
+        (
+            "admins",
+            "Preview, import or verify reviewed domain administrators while preserving existing memberships and security",
+        ),
     ):
         command = commands.add_parser(name, help=description, description=description)
-        command.add_argument("--config", type=Path, required=True, metavar="FILE",
-                             help="JSON configuration file; create one with mailcow-migrate configure --config FILE")
+        command.add_argument(
+            "--config",
+            type=Path,
+            required=True,
+            metavar="FILE",
+            help="JSON configuration file; create one with mailcow-migrate configure --config FILE",
+        )
         if name in ("inspect", "select-source", "export", "plan", "migrate"):
-            command.add_argument("domain", metavar="DOMAIN", help="Lowercase primary mail domain")
+            command.add_argument(
+                "domain", metavar="DOMAIN", help="Lowercase primary mail domain"
+            )
         if name == "inspect":
-            command.add_argument("--output", type=Path, metavar="FILE", help="Save a private JSON report to a new file")
+            command.add_argument(
+                "--output",
+                type=Path,
+                metavar="FILE",
+                help="Save a private JSON report to a new file",
+            )
         if name == "prepare":
-            command.add_argument("--guided", action="store_true", help="Prompt for source DB options, missing API key and shared settings")
+            command.add_argument(
+                "--guided",
+                action="store_true",
+                help="Prompt for source DB options, missing API key and shared settings",
+            )
         if name == "migrate":
-            command.add_argument("--plan", type=Path, metavar="FILE", help="Original plan; otherwise discover/resume the saved domain batch")
-            command.add_argument("--export", type=Path, metavar="DIR", help="Existing completed export; otherwise export a new domain privately")
-            command.add_argument("--quota-mib", type=int, metavar="N", help="Fixed quota for a new PostfixAdmin plan; pinned on resume")
+            command.add_argument(
+                "--plan",
+                type=Path,
+                metavar="FILE",
+                help="Original plan; otherwise discover/resume the saved domain batch",
+            )
+            command.add_argument(
+                "--export",
+                type=Path,
+                metavar="DIR",
+                help="Existing completed export; otherwise export a new domain privately",
+            )
+            command.add_argument(
+                "--quota-mib",
+                type=int,
+                metavar="N",
+                help="Fixed quota for a new PostfixAdmin plan; pinned on resume",
+            )
         if name == "assess":
-            command.add_argument("--phase", choices=("before", "staged", "activated", "handoff"), default="before")
-            command.add_argument("--hostname", help="Client hostname for handoff assessment; defaults to mail.DOMAIN")
-            command.add_argument("--export", type=Path, metavar="DIR", help="Defaults to the original export recorded by planning")
+            command.add_argument(
+                "--phase",
+                choices=("before", "staged", "activated", "handoff"),
+                default="before",
+            )
+            command.add_argument(
+                "--hostname",
+                help="Client hostname for handoff assessment; defaults to mail.DOMAIN",
+            )
+            command.add_argument(
+                "--export",
+                type=Path,
+                metavar="DIR",
+                help="Defaults to the original export recorded by planning",
+            )
         if name == "select-source":
-            command.add_argument("--plan", type=Path, metavar="FILE", help="Original saved plan, including older batches outside the discovery tree")
-            command.add_argument("--record-target-addresses", action="store_true",
-                                 help="After activation, save Mailcow addresses before changing DNS; requires --plan and root on the Mailcow host")
-        if name in ("plan", "sieve", "prefilters", "activate", "webmail", "server-settings"):
-            command.add_argument("--export", type=Path, required=True, metavar="DIR", help="Completed Python source export directory")
+            command.add_argument(
+                "--plan",
+                type=Path,
+                metavar="FILE",
+                help="Original saved plan, including older batches outside the discovery tree",
+            )
+            command.add_argument(
+                "--record-target-addresses",
+                action="store_true",
+                help="After activation, save Mailcow addresses before changing DNS; requires --plan and root on the Mailcow host",
+            )
+        if name in (
+            "plan",
+            "sieve",
+            "prefilters",
+            "activate",
+            "webmail",
+            "server-settings",
+        ):
+            command.add_argument(
+                "--export",
+                type=Path,
+                required=True,
+                metavar="DIR",
+                help="Completed Python source export directory",
+            )
         if name == "plan":
-            command.add_argument("--out", type=Path, required=True, metavar="NEW_DIR", help="New directory for private plan and assessment files")
-            command.add_argument("--quota-mib", type=int, metavar="N", help="PostfixAdmin fixed-quota override; skips source sizing")
+            command.add_argument(
+                "--out",
+                type=Path,
+                required=True,
+                metavar="NEW_DIR",
+                help="New directory for private plan and assessment files",
+            )
+            command.add_argument(
+                "--quota-mib",
+                type=int,
+                metavar="N",
+                help="PostfixAdmin fixed-quota override; skips source sizing",
+            )
         if name == "server-settings":
-            command.add_argument("--action", choices=("preview", "review", "apply", "check"), default="preview")
-            command.add_argument("--apply", action="store_true", help="Required with action apply; selected shared settings affect all domains")
-        if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "source-isolation", "source-forward",
-                    "certificate", "signing", "handoff", "assess",
-                    "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "admins", "activate", "quota", "webmail"):
-            command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
+            command.add_argument(
+                "--action",
+                choices=("preview", "review", "apply", "check"),
+                default="preview",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required with action apply; selected shared settings affect all domains",
+            )
+        if name in (
+            "accounts",
+            "verify",
+            "target-isolation",
+            "source-logins",
+            "source-delivery",
+            "source-isolation",
+            "source-forward",
+            "certificate",
+            "signing",
+            "handoff",
+            "assess",
+            "roundcube-sessions",
+            "sogo-target",
+            "mail",
+            "sieve",
+            "prefilters",
+            "senders",
+            "admins",
+            "activate",
+            "quota",
+            "webmail",
+        ):
+            command.add_argument(
+                "--plan",
+                type=Path,
+                required=True,
+                metavar="FILE",
+                help="Saved plan JSON from a completed planning run",
+            )
         if name == "accounts":
-            command.add_argument("--apply", action="store_true", help="Apply the journaled account-staging operations to Mailcow")
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Apply the journaled account-staging operations to Mailcow",
+            )
         if name == "verify":
-            command.add_argument("--passwords", action="store_true",
-                                 help="Explicitly compare stored mailbox hashes with the plan; later password changes will report a mismatch")
+            command.add_argument(
+                "--passwords",
+                action="store_true",
+                help="Explicitly compare stored mailbox hashes with the plan; later password changes will report a mismatch",
+            )
         if name == "prefilters":
-            command.add_argument("--apply", action="store_true", help="Stage reviewed prefilters inactive and verify their stored values")
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Stage reviewed prefilters inactive and verify their stored values",
+            )
         if name == "senders":
             action = command.add_mutually_exclusive_group()
-            action.add_argument("--apply", action="store_true", help="Merge explicit grants into staged inactive mailboxes")
-            action.add_argument("--check", action="store_true",
-                                help="Read-only verification of completed sender permissions, including after activation")
+            action.add_argument(
+                "--apply",
+                action="store_true",
+                help="Merge explicit grants into staged inactive mailboxes",
+            )
+            action.add_argument(
+                "--check",
+                action="store_true",
+                help="Read-only verification of completed sender permissions, including after activation",
+            )
         if name == "admins":
             action = command.add_mutually_exclusive_group()
-            action.add_argument("--apply", action="store_true", help="Import domain administrators after account activation")
-            action.add_argument("--check", action="store_true", help="Verify completed grants without changing memberships or passwords")
+            action.add_argument(
+                "--apply",
+                action="store_true",
+                help="Import domain administrators after account activation",
+            )
+            action.add_argument(
+                "--check",
+                action="store_true",
+                help="Verify completed grants without changing memberships or passwords",
+            )
         if name in ("mail", "sieve", "activate", "quota", "webmail"):
-            command.add_argument("--apply", action="store_true", help="Apply the selected operation and journal its result")
-            command.add_argument("--writers-stopped", action="store_true",
-                                 help="Confirm batch writers, submission and account administration are stopped on both servers")
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Apply the selected operation and journal its result",
+            )
+            command.add_argument(
+                "--writers-stopped",
+                action="store_true",
+                help="Confirm batch writers, submission and account administration are stopped on both servers",
+            )
         if name == "activate":
-            command.add_argument("--ready", action="store_true", help="Confirm batch review and pre-activation cutover checks are complete")
+            command.add_argument(
+                "--ready",
+                action="store_true",
+                help="Confirm batch review and pre-activation cutover checks are complete",
+            )
         if name == "mail":
-            command.add_argument("--final", action="store_true", help="Record a final mail pass only after an applied copy and live checks succeed")
+            command.add_argument(
+                "--final",
+                action="store_true",
+                help="Record a final mail pass only after an applied copy and live checks succeed",
+            )
         if name == "sieve":
-            command.add_argument("--use-default-sieve", action="store_true",
-                                 help="Use the exported default only for mailboxes without a personal script")
-            command.add_argument("--replace-sieve", action="store_true",
-                                 help="Back up and replace/remove conflicting target scripts and compiled files")
+            command.add_argument(
+                "--use-default-sieve",
+                action="store_true",
+                help="Use the exported default only for mailboxes without a personal script",
+            )
+            command.add_argument(
+                "--replace-sieve",
+                action="store_true",
+                help="Back up and replace/remove conflicting target scripts and compiled files",
+            )
         if name == "target-isolation":
-            command.add_argument("--action", choices=("preview", "pause", "check", "release"), default="preview",
-                                 help="Defaults to read-only preview")
-            command.add_argument("--apply", action="store_true",
-                                 help="Required for pause/release; release requires completed activation and webmail import")
-            command.add_argument("--webmail-repair", action="store_true",
-                                 help="Use a separate pause/restore journal for incomplete webmail import after prior target restoration")
+            command.add_argument(
+                "--action",
+                choices=("preview", "pause", "check", "release"),
+                default="preview",
+                help="Defaults to read-only preview",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required for pause/release; release requires completed activation and webmail import",
+            )
+            command.add_argument(
+                "--webmail-repair",
+                action="store_true",
+                help="Use a separate pause/restore journal for incomplete webmail import after prior target restoration",
+            )
         if name == "source-logins":
-            command.add_argument("--action", choices=("preview", "freeze", "check", "release"), default="preview",
-                                 help="Defaults to read-only preview; check verifies a completed login freeze")
-            command.add_argument("--apply", action="store_true", help="Required for freeze/release; both are forbidden after activation starts")
+            command.add_argument(
+                "--action",
+                choices=("preview", "freeze", "check", "release"),
+                default="preview",
+                help="Defaults to read-only preview; check verifies a completed login freeze",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required for freeze/release; both are forbidden after activation starts",
+            )
         if name == "source-isolation":
-            command.add_argument("--action", choices=("preview", "freeze", "check", "release"), default="preview")
-            command.add_argument("--apply", action="store_true", help="Required for freeze/release; retain local and source recovery journals")
-            command.add_argument("--writers-stopped", action="store_true",
-                                 help="Confirm custom source imports and account administration are stopped")
+            command.add_argument(
+                "--action",
+                choices=("preview", "freeze", "check", "release"),
+                default="preview",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required for freeze/release; retain local and source recovery journals",
+            )
+            command.add_argument(
+                "--writers-stopped",
+                action="store_true",
+                help="Confirm custom source imports and account administration are stopped",
+            )
         if name == "source-forward":
-            command.add_argument("--target-ip", required=True, metavar="IP", help="Fixed Mailcow address reachable from the source on TCP 25")
-            command.add_argument("--apply", action="store_true", help="Start real source-to-Mailcow delivery after recipient/queue checks")
+            command.add_argument(
+                "--target-ip",
+                required=True,
+                metavar="IP",
+                help="Fixed Mailcow address reachable from the source on TCP 25",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Start real source-to-Mailcow delivery after recipient/queue checks",
+            )
         if name == "certificate":
-            command.add_argument("--hostname", help="Public client hostname; defaults to mail.DOMAIN")
-            command.add_argument("--action", choices=("preview", "apply", "check", "retry"), default="preview")
-            command.add_argument("--apply", action="store_true", help="Required with apply/retry; shared nginx/ACME services may restart")
-            command.add_argument("--wait-seconds", type=int, default=300, help="TLS verification window, 10 to 3600 seconds")
+            command.add_argument(
+                "--hostname", help="Public client hostname; defaults to mail.DOMAIN"
+            )
+            command.add_argument(
+                "--action",
+                choices=("preview", "apply", "check", "retry"),
+                default="preview",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required with apply/retry; shared nginx/ACME services may restart",
+            )
+            command.add_argument(
+                "--wait-seconds",
+                type=int,
+                default=300,
+                help="TLS verification window, 10 to 3600 seconds",
+            )
         if name == "signing":
-            command.add_argument("--signer", choices=("mailcow", "relay"), help="Defaults to the saved signer, otherwise Mailcow")
-            command.add_argument("--dkim-name", help="Provider selector._domainkey.DOMAIN")
-            command.add_argument("--cname", help="Provider DKIM CNAME destination; retained as a delegation")
-            command.add_argument("--public-key", help="Provider public key after p= for a TXT record")
-            command.add_argument("--key-type", choices=("rsa", "ed25519"), help="Provider TXT key type; defaults to saved type or rsa")
-            command.add_argument("--relay-id", help="Existing active sender-dependent Mailcow relay ID")
-            command.add_argument("--apply", action="store_true",
-                                 help="Generate only a missing DKIM key or assign the explicitly selected domain relay")
+            command.add_argument(
+                "--signer",
+                choices=("mailcow", "relay"),
+                help="Defaults to the saved signer, otherwise Mailcow",
+            )
+            command.add_argument(
+                "--dkim-name", help="Provider selector._domainkey.DOMAIN"
+            )
+            command.add_argument(
+                "--cname",
+                help="Provider DKIM CNAME destination; retained as a delegation",
+            )
+            command.add_argument(
+                "--public-key", help="Provider public key after p= for a TXT record"
+            )
+            command.add_argument(
+                "--key-type",
+                choices=("rsa", "ed25519"),
+                help="Provider TXT key type; defaults to saved type or rsa",
+            )
+            command.add_argument(
+                "--relay-id", help="Existing active sender-dependent Mailcow relay ID"
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Generate only a missing DKIM key or assign the explicitly selected domain relay",
+            )
         if name == "handoff":
-            command.add_argument("--hostname", help="Public client hostname; defaults to mail.DOMAIN")
-            command.add_argument("--action", choices=("preview", "check", "complete"), default="preview")
-            command.add_argument("--apply", action="store_true", help="Required to record final completion after fresh checks")
-            command.add_argument("--delivery-confirmed", action="store_true", help="Confirm inbound/outbound, alias and catch-all delivery checks")
-            command.add_argument("--clients-confirmed", action="store_true",
-                                 help="Confirm client logins, folders, contents, attachments and webmail data")
-            command.add_argument("--message-auth-confirmed", action="store_true",
-                                 help="Confirm received SPF/DKIM/DMARC and relay Return-Path results")
-            command.add_argument("--permissions-confirmed", action="store_true", help="Confirm allowed/rejected send-as and BCC behavior")
+            command.add_argument(
+                "--hostname", help="Public client hostname; defaults to mail.DOMAIN"
+            )
+            command.add_argument(
+                "--action", choices=("preview", "check", "complete"), default="preview"
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required to record final completion after fresh checks",
+            )
+            command.add_argument(
+                "--delivery-confirmed",
+                action="store_true",
+                help="Confirm inbound/outbound, alias and catch-all delivery checks",
+            )
+            command.add_argument(
+                "--clients-confirmed",
+                action="store_true",
+                help="Confirm client logins, folders, contents, attachments and webmail data",
+            )
+            command.add_argument(
+                "--message-auth-confirmed",
+                action="store_true",
+                help="Confirm received SPF/DKIM/DMARC and relay Return-Path results",
+            )
+            command.add_argument(
+                "--permissions-confirmed",
+                action="store_true",
+                help="Confirm allowed/rejected send-as and BCC behavior",
+            )
         if name == "source-delivery":
-            command.add_argument("--action", choices=("preview", "pause", "check"), default="preview", help="Defaults to read-only preview")
-            command.add_argument("--apply", action="store_true", help="Pause delivery and revoke RoundCube sessions after isolation and draft checks")
+            command.add_argument(
+                "--action",
+                choices=("preview", "pause", "check"),
+                default="preview",
+                help="Defaults to read-only preview",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Pause delivery and revoke RoundCube sessions after isolation and draft checks",
+            )
         if name == "roundcube-sessions":
-            command.add_argument("--action", choices=("preview", "revoke", "check"), default="preview", help="Defaults to source read-only preview")
-            command.add_argument("--directory", metavar="DIR", help="RoundCube installation on the source; pinned to this batch after preview")
-            command.add_argument("--apply", action="store_true", help="Required for revoke; source login and delivery holds must verify")
-            command.add_argument("--drafts-saved", action="store_true", help="Confirm all migrating users saved browser-only drafts on the server")
-            command.add_argument("--reviewed", action="store_true", help="Confirm review of the previously saved, unchanged SOGo proposal")
-            command.add_argument("--accept-deferrals", action="store_true", help="Explicitly defer the listed receipt/reply-folder preferences")
-            command.add_argument("--webmail-repair", action="store_true",
-                                 help="Revoke source sessions for unfinished webmail after activation under verified target isolation")
-            command.add_argument("--writers-stopped", action="store_true", help="Confirm custom source webmail writers are stopped for repair")
+            command.add_argument(
+                "--action",
+                choices=("preview", "revoke", "check"),
+                default="preview",
+                help="Defaults to source read-only preview",
+            )
+            command.add_argument(
+                "--directory",
+                metavar="DIR",
+                help="RoundCube installation on the source; pinned to this batch after preview",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required for revoke; source login and delivery holds must verify",
+            )
+            command.add_argument(
+                "--drafts-saved",
+                action="store_true",
+                help="Confirm all migrating users saved browser-only drafts on the server",
+            )
+            command.add_argument(
+                "--reviewed",
+                action="store_true",
+                help="Confirm review of the previously saved, unchanged SOGo proposal",
+            )
+            command.add_argument(
+                "--accept-deferrals",
+                action="store_true",
+                help="Explicitly defer the listed receipt/reply-folder preferences",
+            )
+            command.add_argument(
+                "--webmail-repair",
+                action="store_true",
+                help="Revoke source sessions for unfinished webmail after activation under verified target isolation",
+            )
+            command.add_argument(
+                "--writers-stopped",
+                action="store_true",
+                help="Confirm custom source webmail writers are stopped for repair",
+            )
         if name == "sogo-target":
-            command.add_argument("--action", choices=("preview", "configure", "check", "inspect-users", "prepare-users"), default="preview",
-                                 help="Defaults to preview; prepare-users refreshes missing sources and cached unknown users before native checks")
-            command.add_argument("--apply", action="store_true",
-                                 help="Required for configure or prepare-users; a SOGo restart briefly interrupts webmail/DAV for all domains")
+            command.add_argument(
+                "--action",
+                choices=(
+                    "preview",
+                    "configure",
+                    "check",
+                    "inspect-users",
+                    "prepare-users",
+                ),
+                default="preview",
+                help="Defaults to preview; prepare-users refreshes missing sources and cached unknown users before native checks",
+            )
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="Required for configure or prepare-users; a SOGo restart briefly interrupts webmail/DAV for all domains",
+            )
     return result
 
 
@@ -217,77 +614,193 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         if options.command == "prepare":
             return run_preparation(configuration, guided=options.guided)
         if options.command == "migrate":
-            return run_migration(configuration, options.domain, plan=options.plan, exported=options.export, fixed_quota=options.quota_mib)
+            return run_migration(
+                configuration,
+                options.domain,
+                plan=options.plan,
+                exported=options.export,
+                fixed_quota=options.quota_mib,
+            )
         if options.command == "assess":
-            return run_assessment(configuration, options.plan, exported=options.export, phase=options.phase, hostname=options.hostname)
+            return run_assessment(
+                configuration,
+                options.plan,
+                exported=options.export,
+                phase=options.phase,
+                hostname=options.hostname,
+            )
         if options.command == "inspect":
             return run_inspection(configuration, options.domain, options.output)
         elif options.command == "select-source":
-            return run_source_selection(configuration, options.domain, plan=options.plan, record_target=options.record_target_addresses)
+            return run_source_selection(
+                configuration,
+                options.domain,
+                plan=options.plan,
+                record_target=options.record_target_addresses,
+            )
         elif options.command == "export":
             return run_export(configuration, options.domain)
         elif options.command == "export-server":
             return run_server_export(configuration)
         elif options.command == "server-settings":
-            return run_server_settings(configuration, options.export, action=options.action, apply=options.apply)
+            return run_server_settings(
+                configuration,
+                options.export,
+                action=options.action,
+                apply=options.apply,
+            )
         elif options.command == "plan":
-            return run_plan(configuration, options.domain, options.export, options.out, options.quota_mib)
+            return run_plan(
+                configuration,
+                options.domain,
+                options.export,
+                options.out,
+                options.quota_mib,
+            )
         elif options.command in ("accounts", "verify"):
-            return run_accounts(configuration, options.plan,
-                                apply=options.command == "accounts" and options.apply, verify=options.command == "verify",
-                                passwords=options.command == "verify" and options.passwords)
+            return run_accounts(
+                configuration,
+                options.plan,
+                apply=options.command == "accounts" and options.apply,
+                verify=options.command == "verify",
+                passwords=options.command == "verify" and options.passwords,
+            )
         elif options.command == "activate":
-            return run_activation(configuration, options.plan, options.export, apply=options.apply,
-                                  ready=options.ready, writers_stopped=options.writers_stopped)
+            return run_activation(
+                configuration,
+                options.plan,
+                options.export,
+                apply=options.apply,
+                ready=options.ready,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "webmail":
-            return run_webmail(configuration, options.plan, options.export, apply=options.apply,
-                               writers_stopped=options.writers_stopped)
+            return run_webmail(
+                configuration,
+                options.plan,
+                options.export,
+                apply=options.apply,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "quota":
-            return run_quota(configuration, options.plan, apply=options.apply, writers_stopped=options.writers_stopped)
+            return run_quota(
+                configuration,
+                options.plan,
+                apply=options.apply,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "target-isolation":
-            return run_target_isolation(configuration, options.plan, action=options.action, apply=options.apply,
-                                        webmail_repair=options.webmail_repair)
+            return run_target_isolation(
+                configuration,
+                options.plan,
+                action=options.action,
+                apply=options.apply,
+                webmail_repair=options.webmail_repair,
+            )
         elif options.command == "source-logins":
-            return run_source_logins(configuration, options.plan, action=options.action, apply=options.apply)
+            return run_source_logins(
+                configuration, options.plan, action=options.action, apply=options.apply
+            )
         elif options.command == "source-delivery":
-            return run_source_delivery(configuration, options.plan, action=options.action, apply=options.apply)
+            return run_source_delivery(
+                configuration, options.plan, action=options.action, apply=options.apply
+            )
         elif options.command == "source-isolation":
-            return run_source_isolation(configuration, options.plan, action=options.action, apply=options.apply,
-                                        writers_stopped=options.writers_stopped)
+            return run_source_isolation(
+                configuration,
+                options.plan,
+                action=options.action,
+                apply=options.apply,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "source-forward":
-            return run_source_forwarding(configuration, options.plan, options.target_ip, apply=options.apply)
+            return run_source_forwarding(
+                configuration, options.plan, options.target_ip, apply=options.apply
+            )
         elif options.command == "certificate":
-            return run_certificate(configuration, options.plan, hostname=options.hostname, action=options.action,
-                                   apply=options.apply, wait_seconds=options.wait_seconds)
+            return run_certificate(
+                configuration,
+                options.plan,
+                hostname=options.hostname,
+                action=options.action,
+                apply=options.apply,
+                wait_seconds=options.wait_seconds,
+            )
         elif options.command == "signing":
-            return run_signing(configuration, options.plan, signer=options.signer, dkim_name=options.dkim_name,
-                               cname=options.cname, public_key=options.public_key, key_type=options.key_type,
-                               relay_id=options.relay_id, apply=options.apply)
+            return run_signing(
+                configuration,
+                options.plan,
+                signer=options.signer,
+                dkim_name=options.dkim_name,
+                cname=options.cname,
+                public_key=options.public_key,
+                key_type=options.key_type,
+                relay_id=options.relay_id,
+                apply=options.apply,
+            )
         elif options.command == "handoff":
-            return run_handoff(configuration, options.plan, hostname=options.hostname, action=options.action, apply=options.apply,
-                               delivery_confirmed=options.delivery_confirmed, clients_confirmed=options.clients_confirmed,
-                               message_auth_confirmed=options.message_auth_confirmed, permissions_confirmed=options.permissions_confirmed)
+            return run_handoff(
+                configuration,
+                options.plan,
+                hostname=options.hostname,
+                action=options.action,
+                apply=options.apply,
+                delivery_confirmed=options.delivery_confirmed,
+                clients_confirmed=options.clients_confirmed,
+                message_auth_confirmed=options.message_auth_confirmed,
+                permissions_confirmed=options.permissions_confirmed,
+            )
         elif options.command == "roundcube-sessions":
-            return run_roundcube_sessions(configuration, options.plan, action=options.action, apply=options.apply,
-                                          directory=options.directory, drafts_saved=options.drafts_saved,
-                                          reviewed=options.reviewed, accept_deferrals=options.accept_deferrals,
-                                          webmail_repair=options.webmail_repair, writers_stopped=options.writers_stopped)
+            return run_roundcube_sessions(
+                configuration,
+                options.plan,
+                action=options.action,
+                apply=options.apply,
+                directory=options.directory,
+                drafts_saved=options.drafts_saved,
+                reviewed=options.reviewed,
+                accept_deferrals=options.accept_deferrals,
+                webmail_repair=options.webmail_repair,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "sogo-target":
-            return run_sogo_target(configuration, options.plan, action=options.action, apply=options.apply)
+            return run_sogo_target(
+                configuration, options.plan, action=options.action, apply=options.apply
+            )
         elif options.command == "mail":
-            return run_mail(configuration, options.plan, apply=options.apply,
-                            final=options.final, writers_stopped=options.writers_stopped)
+            return run_mail(
+                configuration,
+                options.plan,
+                apply=options.apply,
+                final=options.final,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "sieve":
-            return run_sieve(configuration, options.plan, options.export, apply=options.apply,
-                             use_default=options.use_default_sieve, replace=options.replace_sieve, writers_stopped=options.writers_stopped)
+            return run_sieve(
+                configuration,
+                options.plan,
+                options.export,
+                apply=options.apply,
+                use_default=options.use_default_sieve,
+                replace=options.replace_sieve,
+                writers_stopped=options.writers_stopped,
+            )
         elif options.command == "prefilters":
-            return run_prefilters(configuration, options.plan, options.export, apply=options.apply)
+            return run_prefilters(
+                configuration, options.plan, options.export, apply=options.apply
+            )
         elif options.command == "senders":
-            return run_senders(configuration, options.plan, apply=options.apply, check=options.check)
+            return run_senders(
+                configuration, options.plan, apply=options.apply, check=options.check
+            )
         elif options.command == "admins":
-            return run_admins(configuration, options.plan, apply=options.apply, check=options.check)
+            return run_admins(
+                configuration, options.plan, apply=options.apply, check=options.check
+            )
         elif options.command == "check-config":
-            print("Configuration is valid. Credential files and server connectivity have not been checked.")
+            print(
+                "Configuration is valid. Credential files and server connectivity have not been checked."
+            )
         else:
             raise ConfigurationError("Unsupported command: " + options.command)
         return 0
@@ -295,13 +808,15 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         print(str(error))
         return 2
     except MigrationError as error:
-        logging.error("%s", error)
+        logger.error("%s", error)
         return error.exit_code
     except OSError as error:
-        logging.error("Filesystem or system operation failed: %s", error.strerror)
+        logger.error("Filesystem or system operation failed: %s", error.strerror)
         return 1
     except EOFError:
-        logging.error("Input ended. Existing configuration, completed work and recovery journals are retained.")
+        logger.error(
+            "Input ended. Existing configuration, completed work and recovery journals are retained."
+        )
         return 2
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)

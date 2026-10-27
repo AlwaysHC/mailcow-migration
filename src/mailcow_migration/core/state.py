@@ -25,7 +25,7 @@ class Workspace:
     def read(self, relative: str) -> Mapping[str, Any]:
         document = read_json(self.path(relative), private=True)
         if not isinstance(document, dict):
-            raise MigrationError("Migration state must be a JSON object: {}".format(relative))
+            raise MigrationError(f"Migration state must be a JSON object: {relative}")
         return document
 
     def write(self, relative: str, document: Mapping[str, Any]) -> None:
@@ -48,7 +48,9 @@ class Workspace:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
-                raise OperationLocked("Another preparation or migration holds the shared operation lock") from error
+                raise OperationLocked(
+                    "Another preparation or migration holds the shared operation lock"
+                ) from error
             token = HELD_LOCKS.set((*HELD_LOCKS.get(), key))
             yield
         finally:
@@ -58,9 +60,17 @@ class Workspace:
 
 
 def require_identity(state: Mapping[str, Any], expected: Mapping[str, Any]) -> None:
-    if (not isinstance(state, Mapping) or "version" in expected and type(state.get("version")) is not int
-            or any(key not in state or state[key] != value for key, value in expected.items())):
-        raise MigrationError("Saved migration identity differs; reconcile the existing batch before changing its connection or plan")
+    if (
+        not isinstance(state, Mapping)
+        or "version" in expected
+        and type(state.get("version")) is not int
+        or any(
+            key not in state or state[key] != value for key, value in expected.items()
+        )
+    ):
+        raise MigrationError(
+            "Saved migration identity differs; reconcile the existing batch before changing its connection or plan"
+        )
 
 
 @dataclass(frozen=True)
@@ -70,16 +80,32 @@ class OperationJournal:
     identity: Optional[Mapping[str, Any]] = None
 
     def read(self) -> Mapping[str, Any]:
-        state = (self.workspace.read(self.relative_path) if self.workspace.path(self.relative_path).exists() or self.identity is None
-                 else {**self.identity, "done": []})
+        state = (
+            self.workspace.read(self.relative_path)
+            if self.workspace.path(self.relative_path).exists() or self.identity is None
+            else {**self.identity, "done": []}
+        )
         if self.identity is not None:
             require_identity(state, self.identity)
-        if not isinstance(state.get("done"), list) or any(not isinstance(item, str) or not item for item in state["done"]):
-            raise MigrationError("Invalid operation journal: missing completed-operation list")
-        if len(state["done"]) != len(set(state["done"])) or state.get("pending") in state["done"]:
-            raise MigrationError("Duplicate or conflicting operation receipts; retain the journal for reconciliation")
-        if "pending" in state and (not isinstance(state["pending"], str) or not state["pending"]):
-            raise MigrationError("Invalid pending operation; retain the journal for reconciliation")
+        if not isinstance(state.get("done"), list) or any(
+            not isinstance(item, str) or not item for item in state["done"]
+        ):
+            raise MigrationError(
+                "Invalid operation journal: missing completed-operation list"
+            )
+        if (
+            len(state["done"]) != len(set(state["done"]))
+            or state.get("pending") in state["done"]
+        ):
+            raise MigrationError(
+                "Duplicate or conflicting operation receipts; retain the journal for reconciliation"
+            )
+        if "pending" in state and (
+            not isinstance(state["pending"], str) or not state["pending"]
+        ):
+            raise MigrationError(
+                "Invalid pending operation; retain the journal for reconciliation"
+            )
         return state
 
     def save(self, state: Mapping[str, Any]) -> None:
@@ -88,34 +114,66 @@ class OperationJournal:
         self.workspace.write(self.relative_path, state)
 
     def write_mutation(
-        self, identifier: str, endpoint: str, payload: Any,
-        call: Callable[[str, Any], Any], *, apply: bool = False,
+        self,
+        identifier: str,
+        endpoint: str,
+        payload: Any,
+        call: Callable[[str, Any], Any],
+        *,
+        apply: bool = False,
     ) -> str:
         """Call while holding Workspace.lock, after checking the batch's saved identity."""
         state = self.read()
         done = state["done"]
         if state.get("pending"):
-            raise MigrationError("An uncertain operation is pending; reconcile live target state before further writes")
+            raise MigrationError(
+                "An uncertain operation is pending; reconcile live target state before further writes"
+            )
         if identifier in done:
             return "already completed"
         if not apply:
             return "would"
-        pending = {**state, "pending": identifier, "pendingRequest": {"endpoint": endpoint, "payload": payload}}
+        pending = {
+            **state,
+            "pending": identifier,
+            "pendingRequest": {"endpoint": endpoint, "payload": payload},
+        }
         self.save(pending)
         call(endpoint, payload)
-        completed = {key: value for key, value in pending.items() if key not in ("pending", "pendingRequest")}
+        completed = {
+            key: value
+            for key, value in pending.items()
+            if key not in ("pending", "pendingRequest")
+        }
         self.save({**completed, "done": [*done, identifier]})
         return "completed"
 
 
 def reconcile_observed_mutation(
-    journal: OperationJournal, identifier: str, endpoint: str, payload: Mapping[str, Any], verified: bool,
+    journal: OperationJournal,
+    identifier: str,
+    endpoint: str,
+    payload: Mapping[str, Any],
+    verified: bool,
 ) -> None:
     state = journal.read()
     if state.get("pending") != identifier:
         return
-    if state.get("pendingRequest") != {"endpoint": endpoint, "payload": payload} or not verified:
-        raise MigrationError("Uncertain write cannot be reconciled; do not repeat it. Journal: "
-                             + str(journal.workspace.path(journal.relative_path)))
-    journal.save({**{key: value for key, value in state.items() if key not in ("pending", "pendingRequest")},
-                  "done": list(dict.fromkeys([*state["done"], identifier]))})
+    if (
+        state.get("pendingRequest") != {"endpoint": endpoint, "payload": payload}
+        or not verified
+    ):
+        raise MigrationError(
+            "Uncertain write cannot be reconciled; do not repeat it. Journal: "
+            + str(journal.workspace.path(journal.relative_path))
+        )
+    journal.save(
+        {
+            **{
+                key: value
+                for key, value in state.items()
+                if key not in ("pending", "pendingRequest")
+            },
+            "done": list(dict.fromkeys([*state["done"], identifier])),
+        }
+    )

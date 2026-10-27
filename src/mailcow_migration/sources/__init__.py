@@ -23,18 +23,20 @@ class SourceConnection:
 class SourceAdapter(Protocol):
     connection: SourceConnection
 
-    def inspect(self, domain: str) -> Mapping[str, Any]:
-        ...
+    def inspect(self, domain: str) -> Mapping[str, Any]: ...
 
-    def export(self, domain: str) -> Mapping[str, Any]:
-        ...
+    def export(self, domain: str) -> Mapping[str, Any]: ...
 
 
 def configured_sources(configuration: Configuration) -> Tuple[SourceConnection, ...]:
     return tuple(
         SourceConnection(
-            kind, SshConnection(settings.source, settings.ssh_config),
-            getattr(settings, "source_mail_root", None), settings.roundcube_directory, getattr(settings, "mysql_option_file", None),
+            kind,
+            SshConnection(settings.source, settings.ssh_config),
+            getattr(settings, "source_mail_root", None),
+            settings.roundcube_directory,
+            getattr(settings, "mysql_option_file", None),
         )
-        for kind in SourceKind if (settings := getattr(configuration, kind.value)) is not None
+        for kind in SourceKind
+        if (settings := getattr(configuration, kind.value)) is not None
     )

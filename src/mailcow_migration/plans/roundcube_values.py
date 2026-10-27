@@ -8,8 +8,16 @@ MISSING = object()
 
 
 def source_truth(value: Any) -> bool:
-    return value is not MISSING and value is not None and value is not False and not (
-        type(value) in (int, float) and (value == 0 or isinstance(value, float) and math.isnan(value)) or isinstance(value, str) and not value
+    return (
+        value is not MISSING
+        and value is not None
+        and value is not False
+        and not (
+            type(value) in (int, float)
+            and (value == 0 or isinstance(value, float) and math.isnan(value))
+            or isinstance(value, str)
+            and not value
+        )
     )
 
 
@@ -54,7 +62,10 @@ def source_number(value: Any) -> float:
                 return float(int(value, 0))
             except OverflowError:
                 return math.inf
-        if not re.fullmatch(r"[+-]?(?:Infinity|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)", value):
+        if not re.fullmatch(
+            r"[+-]?(?:Infinity|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)",
+            value,
+        ):
             return math.nan
     try:
         return float(value)
@@ -74,8 +85,19 @@ def identity_flag(value: Any) -> Any:
 
 
 def numeric_flag(value: Any) -> bool:
-    return type(value) in (bool, int, float) and value in (0, 1) or isinstance(value, str) and value in ("0", "1")
+    return (
+        type(value) in (bool, int, float)
+        and value in (0, 1)
+        or isinstance(value, str)
+        and value in ("0", "1")
+    )
 
 
 def source_json(value: Any) -> str:
-    return "undefined" if value is MISSING else json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return (
+        "undefined"
+        if value is MISSING
+        else json.dumps(
+            value, ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        )
+    )
