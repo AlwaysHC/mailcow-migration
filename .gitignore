@@ -8,4 +8,5 @@ dist/
 *.code-workspace
 
 Lint.bat
+Lint.txt
 Deploy.bat
