@@ -3,6 +3,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from uuid import uuid4
 
 from .certificates import certificate_environment, wait_for_certificate
 from .configuration import Configuration
@@ -32,7 +33,7 @@ def mailbox_readability(batch: SavedPlan, configuration: Configuration, target: 
         print("Mailbox readability {}/{}: {}.".format(index, len(batch.plan["mailboxes"]), row["username"]), flush=True)
         result = target.compose(("exec", "-T", "dovecot-mailcow", "doveadm", "-f", "flow", "mailbox", "status",
                                  "-u", row["username"], "messages unseen", "*"),
-                                diagnostic_file=batch.directory / ("handoff-mailbox-{}.txt".format(index)))
+                                diagnostic_file=batch.directory / ("handoff-mailbox-{}-{}.txt".format(index, uuid4().hex)))
         folders = []
         for line in result.stdout.splitlines():
             match = re.fullmatch(r"(.+?)\s+(messages=[0-9]+ unseen=[0-9]+|unseen=[0-9]+ messages=[0-9]+)", line)
@@ -72,7 +73,7 @@ def inspect_handoff_queues(batch: SavedPlan, configuration: Configuration, targe
 
     target_rows = tuple(row for row in rows if belongs(row.get("sender")) or any(belongs(item["address"]) for item in row["recipients"]))
     source_text = batch.source.ssh.run(("postqueue", "-p"),
-                                     diagnostic_file=batch.directory / "handoff-source-queue.txt").stdout
+                                     diagnostic_file=batch.directory / ("handoff-source-queue-" + uuid4().hex + ".txt")).stdout
     if not re.search(r"Mail queue is empty|^-[A-Za-z -]*Queue ID|^\s*-Queue ID-", source_text, re.M):
         raise MigrationError("Cannot interpret source queue listing")
     pattern = r"@(?:" + "|".join(re.escape(domain) for domain in batch.plan["domains"]) + r")(?=[\s>,)]|$)"

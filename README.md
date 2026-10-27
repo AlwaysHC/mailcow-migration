@@ -17,13 +17,16 @@ Reviewed domain administrators can be imported after activation, preserving exis
 Guarded webmail import connects RoundCube data, editable SOGo filters and native vacation/forwarding settings with native readback.
 Guarded PostfixAdmin account activation includes copied-Sieve checks, staged prefilters and preservation of completed native handoffs.
 Quota recalculation is available for activated mailboxes under isolation. Source submission checks, forwarding, certificate/signing
-setup and confirmed handoff are available as explicit operations; guided orchestration remains pending.
+setup and confirmed handoff are available as explicit operations and through the guided domain workflow.
 This snapshot has not been validated end to end.
 
 | Command | Available functionality |
 | --- | --- |
 | `configure` | Interactive setup for one or both sources and the Mailcow target. |
 | `check-config` | Local configuration validation. |
+| `prepare` | Check configured sources and Mailcow; `--guided` reviews private credential setup and shared server settings. |
+| `migrate` | Guide a domain through planning, isolation, copying, activation, webmail and confirmed handoff; resume its original batch. |
+| `assess` | Save a consolidated read-only assessment for the before, staged, activated or handoff phase. |
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
 | `select-source` | Select the source using live evidence and saved journals; recognize recorded target addresses after activation. |
 | `export` | Private account/configuration snapshots with completion manifests and file hashes. |
@@ -52,11 +55,48 @@ This snapshot has not been validated end to end.
 | `webmail` | Preview or import approved RoundCube data, editable filters and native settings; retain isolation and verified completion receipts. |
 
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
-and external mail/transfer commands where required. Planned work includes server orchestration, conversion, verification and recovery.
+and external mail/transfer commands where required. Production qualification requires representative staging and recovery runs.
 
 The initial deployment model runs on the Linux Mailcow host with root privileges and SSH access to the selected source.
 Each migration covers one primary mail domain and its mail alias domains. Source adapters share the target implementation
 and migration state model. Runtime helpers are included in this package.
+
+## Guided operation
+
+```bash
+mailcow-migrate prepare --config migration.json
+mailcow-migrate prepare --config migration.json --guided
+mailcow-migrate migrate example.org --config migration.json
+mailcow-migrate assess --config migration.json --plan /root/mailcow-in-progress/plans/example.org/BATCH/plan.json --phase before
+```
+
+Run preparation on the Linux Mailcow host as root. The first command checks tools, source database access, Mailcow services
+and API access without changing either mail service. The guided variant can create a missing private source MySQL option file,
+prompt for a missing API key without echoing it, and review/apply shared PostfixAdmin settings. It contacts only configured sources.
+Credential files already present are retained. Shared Postfix changes and server-administrator choices require explicit approval.
+
+The domain guide exports and plans a new batch or resumes its saved plan. Optional `--plan FILE`, `--export DIR` and
+`--quota-mib N` reuse existing evidence or select a fixed quota for a new PostfixAdmin plan. Review the private summary and policy;
+resolve blocking mappings before proceeding. A changed configuration or policy cannot silently retarget a saved batch.
+To choose a corrected plan before mutations, supply its path explicitly; competing operation journals always block a new batch.
+
+The guide prompts before source isolation, target staging, copying, activation, webmail preparation/import, restoration and handoff.
+Confirm browser drafts, stopped writers, available disk space/inodes and backup readiness only after checking them.
+Default-Sieve use and replacement are explicit choices, initially disabled and pinned when the batch begins.
+Custom-identity configuration and missing SOGo user sources may require a shared webmail/DAV restart.
+An empty confirmation or `q` pauses with exit code 2 and retains recovery evidence. Interruptions never imply automatic rollback.
+
+Resume the same `migrate DOMAIN --config FILE` command. Once activation starts, the guide skips staging and mail/Sieve copying.
+Completed native imports retain later user edits. Incomplete webmail after target restoration uses a separate repair isolation journal.
+Before activation, source recovery offers the supported login-only PostfixAdmin release or Plesk access/delivery release, then stops.
+DNS changes remain manual; completion requires fresh automated checks and explicit real delivery/client/authentication/permission confirmations.
+An uncertain certificate refresh needs the explicit `certificate --action retry --apply` recovery command.
+
+`assess --phase before|staged|activated|handoff` consolidates the applicable findings and saves a private phase report.
+Before/staged checks cover identity, source evidence, quota/storage estimates, isolation prerequisites and SOGo capabilities.
+Native user-data conflicts are assessed after activation; handoff checks cover live DNS, TLS, signing, queues and receipts.
+Assessment can retain local evidence/backups and reconcile an observed pending receipt; it does not change mail-service settings.
+Capacity estimates do not reserve storage, and a successful phase assessment is not approval for later phases or proof of production readiness.
 
 ## Installation
 

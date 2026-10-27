@@ -1,5 +1,6 @@
 import os
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Optional
@@ -7,6 +8,8 @@ from typing import Any, Callable, Iterator, Mapping, Optional
 from ..configuration import WORK_ROOT
 from .errors import MigrationError, OperationLocked
 from .storage import local_path, private_directory, read_json, write_private_json
+
+HELD_LOCKS = ContextVar("mailcow_migration_held_locks", default=())
 
 
 @dataclass(frozen=True)
@@ -34,15 +37,23 @@ class Workspace:
             raise MigrationError("Migration locking requires the Linux Mailcow host")
         import fcntl
 
+        key = (os.getpid(), str(self.path("operation.lock")))
+        if key in HELD_LOCKS.get():
+            yield
+            return
         private_directory(self.root)
-        descriptor = os.open(str(self.path("operation.lock")), os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        descriptor = os.open(key[1], os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        token = None
         try:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
                 raise OperationLocked("Another preparation or migration holds the shared operation lock") from error
+            token = HELD_LOCKS.set((*HELD_LOCKS.get(), key))
             yield
         finally:
+            if token is not None:
+                HELD_LOCKS.reset(token)
             os.close(descriptor)
 
 

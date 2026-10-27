@@ -6,7 +6,7 @@ from uuid import uuid4
 from .sogo import SogoTarget, configuration_blockers, missing_custom_from, missing_user_sources
 from .sogo_folders import inspect_folder_state
 from .sogo_inventory import check_book, check_preferences
-from .sogo_values import configuration_value, enabled, property_list
+from .sogo_values import configuration_value, custom_identity_configuration, enabled, property_list
 from ..core.errors import MigrationError
 from ..core.state import require_identity
 from ..core.storage import json_fingerprint, local_path, read_json, read_text, write_atomic_text, write_private_json, write_private_text
@@ -51,13 +51,7 @@ class SogoPreparation:
 
     def identity_configuration(self, before: str, domains: list) -> str:
         parsed = self.target.parse(before)
-        overrides = parsed.get("domains")
-        if overrides is not None and (not isinstance(overrides, dict) or any(not isinstance(value, dict) for value in overrides.values())):
-            raise MigrationError("Cannot preserve the persistent SOGo domain overrides")
-        changed = {**parsed, "SOGoMailCustomFromEnabled": "YES"}
-        if overrides:
-            changed["domains"] = {domain: {**values, "SOGoMailCustomFromEnabled": "YES"} if domain in domains else values
-                                  for domain, values in overrides.items()}
+        changed = custom_identity_configuration(parsed, domains)
         after = property_list(changed) + "\n"
         self.target.parse(after)
         return after

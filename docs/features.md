@@ -6,7 +6,7 @@ The pre-alpha supports configuration, source inspection, private exports, planni
 PostfixAdmin isolation, mail/Sieve transfer, activation, quota recalculation and webmail import are available as explicit operations.
 Plesk isolation, mail/Sieve transfer, activation, quota recalculation and RoundCube import are also available.
 Explicit forwarding, certificate/signing setup, handoff checks and confirmed completion are available.
-Guided orchestration and end-to-end validation remain unfinished.
+Guided preparation, phase assessments and resumable domain orchestration are implemented. End-to-end validation remains unfinished.
 
 **Preserve** means retain source data and supported behavior within the compatibility matrix.
 **Configure** means expose a mapping, policy or operational choice for explicit review.
@@ -29,9 +29,9 @@ Configuration generation is available in the current development version.
   must produce an actionable error directing the operator to `configure`; do not silently substitute embedded connections.
   Every operational command passes one configuration-loading gate before dispatch and receives the same validated immutable object.
   Configuration generation remains separate so a new file can be created; missing/invalid files fail with the existing repair guidance.
-- [ ] Preserve existing domain-specific settings, policy decisions, and resume identity checks when resolving the configuration.
+- [x] Preserve existing domain-specific settings, policy decisions, and resume identity checks when resolving the configuration.
   Configuration supplies inputs; journals retain operation state. Editing the file must not silently retarget an unfinished batch.
-  Saved-plan/configuration checks and account-journal identity are implemented; full workflow resume remains pending.
+  The guide retains the original plan/export, exact configuration and policy fingerprint, and pinned Sieve choices through resume.
 - [x] Keep configuration generation limited to local configuration output. Server preparation, source isolation,
   account changes, and mail transfer remain separate operations using the saved configuration.
 
@@ -46,11 +46,11 @@ Configuration generation is available in the current development version.
 - [x] Provide `plan DOMAIN --config FILE --export DIR --out NEW_DIR` using completed, verified Python exports.
   Preserve source account/alias/password mapping, source blockers, configured quarantine defaults, measured quotas,
   account policy decisions, initial target readiness/conflicts and empty-domain reuse checks. Save a private review and provenance.
-  Full migration assessment remains pending and is explicitly distinguished from successful account planning.
+  Phase-specific migration assessment remains distinct from successful account planning and operator cutover approval.
 - [x] Extend inspection into migration source selection with saved connection settings, cutover-resume detection and
   cross-source operation-journal checks. `select-source` retains the original batch/configuration and checks all configured sources;
   private target-address evidence permits DNS resume only with matching activation identity. `inspect` remains current-source inspection.
-- [ ] **Preserve:** Provide guided server preparation, domain migration, source prerequisite checks and SOGo capability checks.
+- [x] **Preserve:** Provide guided server preparation, domain migration, source prerequisite checks and SOGo capability checks.
   Add account provisioning, mail transfer, Sieve/SOGo settings, full assessment, administrator and sender-permission import,
   verification, activation and quota recalculation.
 - [x] **Preserve:** Export source account/configuration inventories and record source identity without changing mail service.
@@ -65,11 +65,12 @@ Configuration generation is available in the current development version.
   Reject ambiguous ownership, chained/overlapping domain mappings, and incompatible mailbox paths.
 - [x] **Configure:** Measure stored mail and calculate mailbox/domain capacity with explicit quota headroom and minimums.
   Preserve readable message-size evidence; unknown compression without usable metadata blocks accurate sizing.
-- [ ] **Preserve:** Produce a reviewable plan and assessment showing proposed changes, conflicts, unsupported data,
+- [x] **Preserve:** Produce a reviewable plan and assessment showing proposed changes, conflicts, unsupported data,
   source/target identity, and operator decisions. Preview must not modify either mail service.
   Account, source webmail, shared source settings and sender-policy assessments are implemented.
   Mail storage, rsync capabilities and read-only append previews are implemented.
-  Guarded PostfixAdmin mail execution and webmail verification are available separately. Shared-setting application and full cutover/resume remain pending.
+  Consolidated before/staged/activated/handoff reports retain phase findings, saved decisions, identities and applicable live checks.
+  Native destination checks follow activation under isolation; storage estimates and manual client/delivery checks remain explicit.
 
 ## Accounts and messages
 
@@ -245,13 +246,13 @@ Configuration generation is available in the current development version.
 
 ## Recovery and configuration
 
-- [ ] **Preserve:** Use a shared lock, private exports/backups, versioned journals, atomic state writes, and drift detection.
+- [x] **Preserve:** Use a shared lock, private exports/backups, versioned journals, atomic state writes, and drift detection.
   Record mutation intent before execution and reconcile uncertain results before retrying.
-- [ ] **Preserve:** Resume without duplicate accounts, replacing mail, or overwriting later user edits.
+- [x] **Preserve:** Resume without duplicate accounts, replacing mail, or overwriting later user edits.
   Retain recovery evidence after interruptions and failures.
   Account staging resumes its own receipts and pending requests; target isolation retains resumable pause/release state.
   PostfixAdmin login controls retain a resumable operation journal and support release before activation.
-  Source delivery retains operation stages, source configuration backups and recipient-isolation evidence; delivery release remains pending.
+  Source delivery retains operation stages, source configuration backups and recipient-isolation evidence until verified forwarding.
   Mail copying retains pending/final-pass receipts and resumes through fresh checks and append-only copying.
   Sieve installation shares transfer identity/isolation checks and retains pending stages, export fingerprints and conflict backups.
   Inactive prefilter staging retains source/policy identity and reconciles uncertain API outcomes against live target data.
@@ -260,12 +261,14 @@ Configuration generation is available in the current development version.
   Native vacation/forwarding imports retain per-user snapshots and stop on pending writes until explicit reconciliation.
   Prefilter activation shares staging identity/receipts and verifies uncertain activity edits without repeating them blindly.
   Account activation retains pinned requests, ordered receipts and verification of partially restored activity.
-  Full source isolation and other workflow journals remain pending.
+  The guided workflow shares one operation lock, retains batch ownership and skips copying/staging after any activation intent.
+  Completed webmail stages retain later edits; incomplete post-restoration webmail uses a separate guarded repair path.
 - [x] **Preserve:** Allow source release only within the supported pre-activation recovery boundary.
   Activation/forwarding changes require their own reconciliation; do not claim a general rollback after cutover.
   Refuse activation intent, uncertain requests, missing account evidence after target isolation, and recorded forwarding/completion.
   PostfixAdmin restores only its login exclusion and retains delivery holds; Plesk restores its journaled access/delivery controls.
-- [ ] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.
+- [x] **Configure:** Preserve the existing connection settings, CLI options, policy files, prompts, defaults, and validations.
+  Preparation and migration reuse the same configuration gate and component commands, with explicit choices and retained recovery state.
   Further generalization beyond the configuration wizard and independent source selection is future work.
 - [x] **Preserve:** Detect unfinished batches and coordinate locking across preparation and migration operations.
   Validate saved settings, state versions and fingerprints before resuming.

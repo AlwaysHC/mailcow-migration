@@ -250,13 +250,13 @@ class TargetIsolation:
         self.command("nginx-mailcow", ("nginx", "-t"))
         self.command("nginx-mailcow", ("nginx", "-s", "reload"))
 
-    def preflight(self) -> Tuple[list, list]:
+    def preflight(self, *, require_accounts: bool = True) -> Tuple[list, list]:
         state = self.state()
         if state.get("released") or state.get("pending") == "release":
             raise MigrationError("Target access restoration has started; do not copy into live mailboxes")
         if re.search(r"/transport_maps\s*=", self.postfix(("postconf", "-P")), re.M):
             raise MigrationError("A Mailcow Postfix service overrides transport_maps; isolation adapter required")
-        users, jobs = self.inventory()
+        users, jobs = self.inventory() if require_accounts else ([], [])
         self.running_jobs()
         _, sogo = inspect_container(self.target, "sogo-mailcow")
         network = sogo.get("NetworkSettings")

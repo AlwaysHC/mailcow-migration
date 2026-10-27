@@ -8,15 +8,18 @@ from . import __version__
 from .accounts import run_accounts
 from .admins import run_admins
 from .activation import run_activation
+from .assessment import run_assessment
 from .certificates import run_certificate
 from .configuration import load_configuration
 from .core.errors import ConfigurationError, MigrationError
+from .core.prompts import WorkflowPaused
 from .exporting import run_export
 from .inspection import run_inspection
 from .handoff import run_handoff
 from .isolation import run_target_isolation
 from .mail import run_mail
 from .planning import run_plan
+from .preparation import run_preparation
 from .prefilters import run_prefilters
 from .quota import run_quota
 from .roundcube_sessions import run_roundcube_sessions
@@ -33,19 +36,23 @@ from .source_logins import run_source_logins
 from .source_selection import run_source_selection
 from .webmail import run_webmail
 from .wizard import configure
+from .workflow import run_migration
 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="mailcow-migrate", description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
-        epilog="Preparation, account staging, target isolation and PostfixAdmin login and delivery controls are available. "
-               "Transfers, activation and webmail import require stopped writers. Full isolation and final handoff remain pending.",
+        epilog="Use prepare --guided for server preparation and migrate DOMAIN for the guided domain workflow. "
+               "Explicit component commands remain available for review, guarded changes and recovery.",
     )
     result.add_argument("--version", action="version", version="%(prog)s " + __version__)
     commands = result.add_subparsers(dest="command", required=True)
     for name, description in (
         ("configure", "Generate configuration interactively on the Linux Mailcow host"),
         ("check-config", "Validate a configuration file locally without contacting servers"),
+        ("prepare", "Check configured source/target prerequisites; optionally guide shared server preparation"),
+        ("migrate", "Guide a domain through reviewed planning, isolation, import, activation and verified handoff"),
+        ("assess", "Gather phase-specific migration findings without changing source or target mail services"),
         ("inspect", "Inspect source domain configuration, Maildirs and authoritative DNS without changing mail services"),
         ("select-source", "Select a source using DNS, saved batch identity and operation journals, including DNS handoff resume"),
         ("export", "Export private source configuration and account data without changing mail services"),
@@ -76,10 +83,19 @@ def parser() -> argparse.ArgumentParser:
         command = commands.add_parser(name, help=description, description=description)
         command.add_argument("--config", type=Path, required=True, metavar="FILE",
                              help="JSON configuration file; create one with mailcow-migrate configure --config FILE")
-        if name in ("inspect", "select-source", "export", "plan"):
+        if name in ("inspect", "select-source", "export", "plan", "migrate"):
             command.add_argument("domain", metavar="DOMAIN", help="Lowercase primary mail domain")
         if name == "inspect":
             command.add_argument("--output", type=Path, metavar="FILE", help="Save a private JSON report to a new file")
+        if name == "prepare":
+            command.add_argument("--guided", action="store_true", help="Prompt for source DB options, missing API key and shared settings")
+        if name == "migrate":
+            command.add_argument("--plan", type=Path, metavar="FILE", help="Original plan; otherwise discover/resume the saved domain batch")
+            command.add_argument("--export", type=Path, metavar="DIR", help="Existing completed export; otherwise export a new domain privately")
+            command.add_argument("--quota-mib", type=int, metavar="N", help="Fixed quota for a new PostfixAdmin plan; pinned on resume")
+        if name == "assess":
+            command.add_argument("--phase", choices=("before", "staged", "activated", "handoff"), default="before")
+            command.add_argument("--export", type=Path, metavar="DIR", help="Defaults to the original export recorded by planning")
         if name == "select-source":
             command.add_argument("--plan", type=Path, metavar="FILE", help="Original saved plan, including older batches outside the discovery tree")
             command.add_argument("--record-target-addresses", action="store_true",
@@ -93,7 +109,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--action", choices=("preview", "review", "apply", "check"), default="preview")
             command.add_argument("--apply", action="store_true", help="Required with action apply; selected shared settings affect all domains")
         if name in ("accounts", "verify", "target-isolation", "source-logins", "source-delivery", "source-isolation", "source-forward",
-                    "certificate", "signing", "handoff",
+                    "certificate", "signing", "handoff", "assess",
                     "roundcube-sessions", "sogo-target", "mail", "sieve", "prefilters", "senders", "admins", "activate", "quota", "webmail"):
             command.add_argument("--plan", type=Path, required=True, metavar="FILE", help="Saved plan JSON from a completed planning run")
         if name == "accounts":
@@ -197,6 +213,12 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
             configure(options.config)
             return 0
         configuration = load_configuration(options.config)
+        if options.command == "prepare":
+            return run_preparation(configuration, guided=options.guided)
+        if options.command == "migrate":
+            return run_migration(configuration, options.domain, plan=options.plan, exported=options.export, fixed_quota=options.quota_mib)
+        if options.command == "assess":
+            return run_assessment(configuration, options.plan, exported=options.export, phase=options.phase)
         if options.command == "inspect":
             return run_inspection(configuration, options.domain, options.output)
         elif options.command == "select-source":
@@ -268,6 +290,9 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         else:
             raise ConfigurationError("Unsupported command: " + options.command)
         return 0
+    except WorkflowPaused as error:
+        print(str(error))
+        return 2
     except MigrationError as error:
         logging.error("%s", error)
         return error.exit_code
@@ -275,7 +300,7 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         logging.error("Filesystem or system operation failed: %s", error.strerror)
         return 1
     except EOFError:
-        logging.error("Input ended; configuration was not saved")
+        logging.error("Input ended. Existing configuration, completed work and recovery journals are retained.")
         return 2
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)

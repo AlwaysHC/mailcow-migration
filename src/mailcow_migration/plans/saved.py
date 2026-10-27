@@ -35,12 +35,12 @@ def validate_plan_inventory(plan: Mapping[str, Any], inventory: DomainInventory)
         raise MigrationError("Source domain/mailbox inventory differs from the plan; retain the batch and reconcile before continuing")
 
 
-def validate_saved_plan(plan: Any) -> None:
+def validate_saved_plan(plan: Any, *, allow_blockers: bool = False) -> None:
     if (not isinstance(plan, dict) or type(plan.get("version")) is not int or plan["version"] != 1
             or not valid_domain(plan.get("domain")) or not isinstance(plan.get("blockers"), list)
             or any(not isinstance(item, str) for item in plan["blockers"])):
         raise MigrationError("Unsupported plan version or domain")
-    if plan["blockers"]:
+    if plan["blockers"] and not allow_blockers:
         raise MigrationError("Plan is blocked:\n" + "\n".join(plan["blockers"]))
     domains = plan.get("domains")
     if (not isinstance(domains, list) or any(not valid_domain(item) for item in domains)
@@ -69,10 +69,10 @@ def validate_saved_plan(plan: Any) -> None:
         raise MigrationError("Invalid account plan fields; contents omitted") from error
 
 
-def load_saved_plan(file: Path, configuration: Configuration) -> SavedPlan:
+def load_saved_plan(file: Path, configuration: Configuration, *, allow_blockers: bool = False) -> SavedPlan:
     path = local_path(file)
     plan = read_json(path, private=True)
-    validate_saved_plan(plan)
+    validate_saved_plan(plan, allow_blockers=allow_blockers)
     manifest = read_json(path.parent / "manifest.json", private=True)
     assessment = read_json(path.parent / "assessment.json", private=True)
     fingerprint = json_fingerprint(plan, canonical=True)

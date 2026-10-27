@@ -41,7 +41,7 @@ def load_server_export(configuration: Configuration, directory: Path) -> ServerE
     return evidence
 
 
-def run_server_export(configuration: Configuration) -> int:
+def export_server(configuration: Configuration) -> Path:
     require_mailcow_host()
     require_inspection_host(("scp",))
     source = server_source(configuration)
@@ -64,4 +64,9 @@ def run_server_export(configuration: Configuration) -> int:
             print("Shared export incomplete; retain local and remote evidence: " + str(destination))
             raise
     print("Private shared-server export: {}. Source mail services were not changed.".format(destination))
+    return destination
+
+
+def run_server_export(configuration: Configuration) -> int:
+    export_server(configuration)
     return 0

@@ -53,7 +53,7 @@ def export_file_manifest(directory: Path, *, secure: bool = True) -> Mapping[str
     return files
 
 
-def run_export(configuration: Configuration, domain: str) -> int:
+def export_domain(configuration: Configuration, domain: str) -> Path:
     domain_name(domain)
     require_inspection_host()
     workspace = Workspace()
@@ -99,4 +99,9 @@ def run_export(configuration: Configuration, domain: str) -> int:
     if blockers:
         print("Preserved {} source-reported blockers; review them in the private snapshot before planning.".format(len(blockers)))
     print("Export completion is not migration readiness. Accounts, messages and mail services were not changed.")
+    return destination
+
+
+def run_export(configuration: Configuration, domain: str) -> int:
+    export_domain(configuration, domain)
     return 0

@@ -1,9 +1,20 @@
 import math
 import re
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from ..core.errors import MigrationError
 from ..plans.roundcube_values import MISSING, identity_flag, source_string
+
+
+def custom_identity_configuration(config: Mapping[str, Any], domains: Sequence[str]) -> Mapping[str, Any]:
+    overrides = config.get("domains")
+    if overrides is not None and (not isinstance(overrides, dict) or any(not isinstance(value, dict) for value in overrides.values())):
+        raise MigrationError("Cannot preserve the SOGo domain overrides")
+    changed = {**config, "SOGoMailCustomFromEnabled": "YES"}
+    if overrides:
+        changed["domains"] = {domain: {**values, "SOGoMailCustomFromEnabled": "YES"} if domain in domains else values
+                              for domain, values in overrides.items()}
+    return changed
 
 
 def xml_text(value: str) -> str:

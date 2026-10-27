@@ -15,7 +15,8 @@ OPERATION_FILES = (
     "target-isolation.json", "webmail-target-isolation.json", "transfers.json", "prefilters.json", "senders.json",
     "admins.json", "admin-credentials.json", "quota.json", "roundcube/state.json", "roundcube-sessions/state.json",
     "sogo-target/config-state.json", "sogo-target/native-import-state.json", "sogo-filters/state.json",
-    "sogo-settings/state.json", "completed.json",
+    "sogo-settings/state.json", "dkim.json", "outgoing-relay.json", "signing-choice.json",
+    "mail-certificate-request.json", "workflow.json", "completed.json",
 )
 
 
@@ -39,7 +40,16 @@ def operation_files(directory: Path) -> Tuple[Path, ...]:
     present = tuple(path for path in files if path.exists())
     if any(not path.is_file() for path in present):
         raise MigrationError("An operation journal is not a regular file; retain the batch: " + str(directory))
-    return present
+    result = []
+    for path in present:
+        if path == local_path(directory / "roundcube-sessions/state.json"):
+            state = read_json(path, private=True)
+            if (isinstance(state, dict) and type(state.get("version")) is int and state["version"] == 1
+                    and state.get("kind") == "roundcube-session-isolation" and state.get("stage") == "preview"
+                    and state.get("complete") is False and state.get("attempts") == []):
+                continue
+        result.append(path)
+    return tuple(result)
 
 
 def batch_location(directory: Path) -> BatchLocation:

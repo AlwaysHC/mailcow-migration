@@ -41,6 +41,16 @@ def prefilter_values(row: Mapping[str, Any]) -> Mapping[str, Any]:
             "script_data": row.get("script_data"), "script_desc": row.get("script_desc")}
 
 
+def verify_container_dates(
+    commands: Sequence[Callable[[Sequence[str]], str]], dates: Mapping[int, Mapping[str, str]], zone: str,
+) -> None:
+    for seconds, parts in dates.items():
+        expected = "{year}-{month}-{day} {hour}:{minute}:{second}".format(**parts)
+        for command in commands:
+            if command(("date", "-d", "@" + str(seconds), "+%F %T")).strip() != expected:
+                raise MigrationError("Container timezone differs from vacationTimeZone ({}) at {}.".format(zone, seconds))
+
+
 @dataclass(frozen=True)
 class SogoSettingsImport:
     filters: SogoFilterImport
@@ -126,11 +136,8 @@ class SogoSettingsImport:
         if missing_user_sources([user], config):
             raise MigrationError(username + ": prepare the SOGo user source before native settings import")
         vacation = user["preferences"].get("Vacation")
-        for seconds in (vacation["startDate"], vacation["endDate"]) if vacation else ():
-            expected = "{year}-{month}-{day} {hour}:{minute}:{second}".format(**dates[seconds])
-            for command in (self.target.command, self.scripts.command):
-                if command(("date", "-d", "@" + str(seconds), "+%F %T")).strip() != expected:
-                    raise MigrationError(username + ": container timezone differs from vacationTimeZone (" + zone + ")")
+        verify_container_dates((self.target.command, self.scripts.command),
+                               {seconds: dates[seconds] for seconds in (vacation["startDate"], vacation["endDate"])} if vacation else {}, zone)
         active = self.scripts.active(username)
         if not same_script(active, self.scripts.stored(username)) or not same_script(active, source["script"]):
             raise MigrationError(username + ": active/stored Sieve differs from the export; no overwrite performed")
