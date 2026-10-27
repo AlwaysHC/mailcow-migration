@@ -43,9 +43,10 @@ def configuration_blockers(users: Sequence[Mapping[str, Any]], config: Mapping[s
         username, preferences = user["username"], user["preferences"]
         domain = username.split("@")[1]
         setting = lambda key: configuration_value(config, domain, key)
-        if source_truth(user.get("filters")):
-            if not isinstance(user["filters"], list):
-                raise MigrationError(username + ": invalid editable-filter proposal")
+        filters = user.get("filters", [])
+        if not isinstance(filters, list):
+            raise MigrationError(username + ": invalid editable-filter proposal")
+        if filters or any(source_truth(preferences.get(key)) for key in ("Vacation", "Forward")):
             if not enabled(setting("SOGoSieveScriptsEnabled")):
                 blockers.append(username + ": SOGo editable filters are disabled")
             for key in ("Vacation", "Forward"):
@@ -59,7 +60,7 @@ def configuration_blockers(users: Sequence[Mapping[str, Any]], config: Mapping[s
                             "SOGoSieveScriptHeaderTemplateFile", "SOGoSieveScriptFooterTemplateFile"):
                     if source_truth(setting(key)):
                         blockers.append(username + ": reconcile " + key + " before generating native settings")
-            if (any(action.get("method") == "redirect" for row in user["filters"] for action in row["actions"])
+            if (any(action.get("method") == "redirect" for row in filters for action in row["actions"])
                     and not enabled(setting("SOGoForwardEnabled"))):
                 blockers.append(username + ": enable SOGoForwardEnabled before importing editable redirect rules")
         if preferences.get("SOGoMailIdentities") and not enabled(setting("SOGoMailCustomFromEnabled")):

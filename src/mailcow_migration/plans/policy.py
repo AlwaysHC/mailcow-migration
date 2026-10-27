@@ -82,8 +82,8 @@ def policy_plan(plan: Mapping[str, Any], evidence: ExportEvidence, policy: Mappi
     shared_settings = shared_settings_assessment(plan, evidence, policy)
     checks.extend(shared_settings["checks"])
     checks.extend(check(identifier, "pending", detail) for identifier, detail in (
-        ("webmail-data", "RoundCube preservation and SOGo import assessment are not implemented yet"),
-        ("cutover-resume", "Isolation, migration journals, DNS handoff and delivery verification are not implemented yet"),
+        ("webmail-data", "Review the RoundCube proposal and complete SOGo capability/conflict assessment before webmail import"),
+        ("cutover-resume", "Complete phase assessments, guarded isolation/import/activation and verified DNS/delivery handoff"),
     ))
     return {"checks": checks, "admins": admins, "recovery": recovery["emails"], "forwardings": forwardings,
             "senderPermissions": permissions, "webmail": webmail, "sharedSettings": shared_settings}

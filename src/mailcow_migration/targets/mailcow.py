@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from ..configuration import MailcowConfiguration, api_origin
-from ..core.commands import CommandResult, run_command
+from ..core.commands import CommandResult, redact, run_command
 from ..core.errors import ApiError, ConfigurationError, MigrationError
 from ..core.storage import decode_json, read_text
 
@@ -96,7 +96,11 @@ class MailcowApi:
                     if isinstance(item, dict) and item.get("type") != "success":
                         message = item.get("msg")
                         code = message[0] if isinstance(message, list) and message else message
-                        codes.append(code if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_-]*", code, re.I) else "rejected")
+                        code = code if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_-]*", code, re.I) else "rejected"
+                        values = payload.get("attr", payload) if isinstance(payload, dict) else {}
+                        values = values if isinstance(values, dict) else {}
+                        codes.append(redact(code, (key, *(value for name, value in values.items()
+                                                        if name in ("password", "password2") and isinstance(value, str)))))
                 raise ApiError(
                     "Mailcow API did not report success ({}); retain the journal and inspect the target".format(
                         ", ".join(codes) or "empty or invalid response"
@@ -141,9 +145,10 @@ class MailcowTarget:
     def compose(
         self, arguments: Sequence[str], *, input_text: Optional[str] = None, timeout: Optional[float] = 120, private_output: bool = True,
         diagnostic_file: Optional[Path] = None, allowed_codes: Sequence[int] = (0,), inherit_output: bool = False,
+        secrets: Sequence[str] = (),
     ) -> CommandResult:
         return run_command(
             ("docker", "compose", "--project-directory", self.settings.directory, *arguments),
             input_text=input_text, timeout=timeout, private_output=private_output, label="Mailcow Docker Compose",
-            diagnostic_file=diagnostic_file, allowed_codes=allowed_codes, inherit_output=inherit_output,
+            diagnostic_file=diagnostic_file, allowed_codes=allowed_codes, inherit_output=inherit_output, secrets=secrets,
         )

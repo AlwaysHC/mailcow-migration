@@ -25,6 +25,7 @@ def verify_target_passwords(target: MailcowTarget, kind: str, passwords: Mapping
     result = target.compose(
         ("exec", "-T", "php-fpm-mailcow", "php", "-r", php_resource("verify-password.php")),
         input_text=json.dumps({"kind": kind, "passwords": passwords}, allow_nan=False),
+        secrets=tuple(passwords.values()),
         diagnostic_file=directory / ("password-reconciliation-" + uuid4().hex + ".txt"),
     )
     try:

@@ -2,7 +2,9 @@ import os
 import sys
 from pathlib import Path
 
-from .accounts import account_activation_mutations, account_journal, account_mutations, validate_account_journal, verify_account_inventory
+from .accounts import (
+    account_activation_mutations, account_journal, account_mutations, activation_started, validate_account_journal, verify_account_inventory,
+)
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
@@ -43,8 +45,7 @@ def run_target_isolation(
         if action == "release":
             isolation.release(state)
             return 0
-        if not isolation.webmail_repair and action != "check" and (
-                current.webmail_repair or "activationRequests" in state or state.get("activated") or "enable domain for activation" in state["done"]):
+        if not isolation.webmail_repair and action != "check" and (current.webmail_repair or activation_started(state)):
             raise MigrationError("Initial target isolation is forbidden after activation starts; use --webmail-repair after completed restoration")
         recovery = recovery_plan(batch.plan)
         inventory = account_inventory(target.api)

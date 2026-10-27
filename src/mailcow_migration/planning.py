@@ -98,7 +98,7 @@ def planning_summary(
     lines.extend("  [{}] {}: {}".format(row["status"], row["id"], row["detail"]) for row in assessment["checks"])
     lines.extend("  " + reason for reason in target["conflicts"]["reasons"])
     lines.extend(("", "Planning notes:", *("  " + note for note in plan["notes"]), "",
-                  "Planning is not migration approval. Pending assessments must be implemented and completed before migration.",
+                  "Planning is not migration approval. Complete the applicable phase assessments and operator checks before proceeding.",
                   "This plan does not resume an existing migration batch; retain its saved state and recovery evidence."))
     return "\n".join(lines) + "\n"
 

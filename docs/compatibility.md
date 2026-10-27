@@ -20,7 +20,7 @@ Inactive forwarding/vacation prefilter staging is available separately, with exa
 Explicit sender-permission staging and read-only verification are also available.
 Domain administrator preview/import/check supports reviewed PostfixAdmin mappings and preserves existing target memberships/security.
 Plesk source isolation, mail/Sieve transfer, activation, quota recalculation and native RoundCube import are implemented;
-PostfixAdmin submission checks and guarded forwarding/handoff are implemented. Guided orchestration remains pending.
+PostfixAdmin submission checks and guarded forwarding/handoff are implemented, with guided preparation and domain orchestration.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
 All operational CLI commands pass the same loader before dispatch; the wizard remains the file-creation path.
@@ -30,7 +30,7 @@ PostfixAdmin and Plesk are independently optional: configure at least one. Sourc
 only to configured sources; an unconfigured server does not need to exist or be reachable.
 The `inspect` command uses local OpenSSH and `dig`, remote Bash/`hostname -I` and filesystem access, plus the PostfixAdmin
 MySQL client or Plesk Python/CLI database access. It checks source inventories and current authoritative DNS routing;
-full prerequisite assessment and workflow orchestration remain planned work.
+`prepare` adds source/target prerequisites and `migrate` coordinates the guarded domain workflow.
 
 `select-source` adds saved-plan/configuration validation, batch discovery and cross-source operation-journal checks under the
 shared lock. It requires root on the Mailcow host. Recording target addresses additionally needs Docker Compose, running
@@ -52,7 +52,7 @@ Unknown required routing semantics remain blockers. Shared choices, pending writ
 The `export` command additionally uses local `scp -O` for PostfixAdmin and the existing source Bash/MySQL dump/configuration
 utilities; Plesk export uses its root-only Python/CLI snapshot reader. Only the matching source is exported. Export success
 does not qualify account mappings or product versions. Export uses journal-aware source selection and blocks refresh after activation starts;
-full migration orchestration remains pending.
+the guided workflow resumes the original batch and never refreshes its export after activation intent.
 Default planning also requires the source sizing helper's Bash/find/mktemp/od/gzip/wc/rm/awk commands, and checks current source
 inventory before and after sizing. Its PostfixAdmin `--quota-mib` override skips source measurement and source transfer checks;
 the live target and local receiver capabilities are still checked. Transfer checks require readable host access to the actual

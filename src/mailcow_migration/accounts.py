@@ -189,8 +189,12 @@ def account_journal(batch: SavedPlan, configuration: Configuration) -> Operation
     return OperationJournal(Workspace(batch.directory), "state.json", identity)
 
 
+def activation_started(state: Mapping[str, Any]) -> bool:
+    return bool(state.get("activated") or "activationRequests" in state or "enable domain for activation" in state["done"])
+
+
 def require_before_activation(state: Mapping[str, Any]) -> None:
-    if state.get("pending") or state.get("activated") or "enable domain for activation" in state["done"]:
+    if state.get("pending") or activation_started(state):
         raise MigrationError("This operation is forbidden after target activation starts or during an uncertain target write")
 
 
@@ -198,9 +202,8 @@ def require_source_recovery(batch: SavedPlan, configuration: Configuration) -> N
     journal = account_journal(batch, configuration)
     state = journal.read()
     require_before_activation(state)
-    if "activationRequests" in state or (local_path(batch.directory / "target-isolation.json").exists()
-                                        and not journal.workspace.path(journal.relative_path).exists()):
-        raise MigrationError("Activation intent or missing account evidence requires reconciliation before source recovery")
+    if local_path(batch.directory / "target-isolation.json").exists() and not journal.workspace.path(journal.relative_path).exists():
+        raise MigrationError("Missing account evidence requires reconciliation before source recovery")
     if local_path(batch.directory / "source-forwarding.json").exists() or local_path(batch.directory / "completed.json").exists():
         raise MigrationError("Source forwarding or completion has been recorded; reconcile handoff instead of releasing source controls")
 
@@ -222,7 +225,7 @@ def run_accounts(
         journal = account_journal(batch, configuration)
         state = journal.read()
         policy_fingerprint = account_security_policy(batch, state)
-        if not verify and ("activationRequests" in state or state.get("activated") or "enable domain for activation" in state["done"]):
+        if not verify and activation_started(state):
             raise MigrationError("Account staging is forbidden after activation starts")
         operations = account_mutations(plan, recovery["emails"], reuse_domain=bool(state.get("existingDomain")))
         target = MailcowTarget(configuration.mailcow)

@@ -58,7 +58,8 @@ class Workspace:
 
 
 def require_identity(state: Mapping[str, Any], expected: Mapping[str, Any]) -> None:
-    if not isinstance(state, Mapping) or any(key not in state or state[key] != value for key, value in expected.items()):
+    if (not isinstance(state, Mapping) or "version" in expected and type(state.get("version")) is not int
+            or any(key not in state or state[key] != value for key, value in expected.items())):
         raise MigrationError("Saved migration identity differs; reconcile the existing batch before changing its connection or plan")
 
 
@@ -73,8 +74,10 @@ class OperationJournal:
                  else {**self.identity, "done": []})
         if self.identity is not None:
             require_identity(state, self.identity)
-        if not isinstance(state.get("done"), list) or any(not isinstance(item, str) for item in state["done"]):
+        if not isinstance(state.get("done"), list) or any(not isinstance(item, str) or not item for item in state["done"]):
             raise MigrationError("Invalid operation journal: missing completed-operation list")
+        if len(state["done"]) != len(set(state["done"])) or state.get("pending") in state["done"]:
+            raise MigrationError("Duplicate or conflicting operation receipts; retain the journal for reconciliation")
         if "pending" in state and (not isinstance(state["pending"], str) or not state["pending"]):
             raise MigrationError("Invalid pending operation; retain the journal for reconciliation")
         return state

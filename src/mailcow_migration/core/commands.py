@@ -40,6 +40,8 @@ def run_command(
         raise MigrationError("A command argument sequence and a positive timeout or None are required")
     if inherit_output and (stdout_file is not None or diagnostic_file is not None):
         raise MigrationError("Inherited command output cannot also use private output files")
+    if inherit_output and secrets:
+        raise MigrationError("Commands with secrets require captured output for redaction")
     name = label or Path(arguments[0]).name
     LOGGER.debug("Running %s", name)
     try:
@@ -67,7 +69,7 @@ def run_command(
     result = CommandResult(process.returncode, process.stdout or "", process.stderr or "")
     if result.stderr:
         if diagnostic_file is not None:
-            write_private_text(diagnostic_file, result.stderr)
+            write_private_text(diagnostic_file, redact(result.stderr, secrets))
             diagnostic = "diagnostics saved privately to {}".format(diagnostic_file)
         else:
             diagnostic = "private diagnostic output received" if private_output else redact(result.stderr.rstrip(), secrets)

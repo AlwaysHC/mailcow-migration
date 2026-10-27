@@ -119,7 +119,9 @@ Configuration generation is available in the current development version.
   Preview the saved proposal, require explicit rename/merge ownership decisions, preserve existing memberships/security,
   generate private new credentials and reconcile uncertain writes before retrying. Read back imported grants; webmail import
   requires completed administrator receipts. Global administrator application remains part of the separate shared-server work.
-- [ ] **Configure:** Preserve supported send-as grants and BCC rules without widening existing target permissions or scope.
+- [x] **Configure:** Preserve supported send-as grants and BCC rules without widening existing target permissions or scope.
+  New sender grants name explicit batch addresses; inactive aliases do not count as live authorization, and edit readback checks exact ACL scope.
+  BCC retains source sender scope/destination, stages inactive and activates by verified target ID. Final real-mail permission checks remain explicit.
 - [x] Apply explicit sender-permission mappings to staged inactive mailboxes and verify them through the target API.
   Recognize existing direct/wildcard/alias coverage, retain old ACL entries and password-change/two-factor requirements,
   and journal uncertain edits for reconciliation without blindly resending them. Read-only checks remain available after activation.
@@ -276,8 +278,11 @@ Configuration generation is available in the current development version.
   Show incomplete planning, retain released-operation ownership and reject competing journals before new planning or saved-plan operations.
   Older batches outside the discovery tree require an explicit original plan. Unsupported formats stop without conversion;
   any future conversion must preserve operation ownership and recovery evidence before resuming mutations.
-- [ ] **Preserve:** Keep terminal prompts/progress useful, errors visible, and logs free of passwords, API keys, and message content.
+- [x] **Preserve:** Keep terminal prompts/progress useful, errors visible, and logs free of passwords, API keys, and message content.
   Package every required runtime resource inside this project.
+  Public output contains status/counts and private evidence paths; known credentials are redacted from native diagnostics and API failure codes.
+  Source SQL/configuration exports and user-data backups intentionally contain private data and retain owner-only access.
+  Runtime resources are declared in package data; production qualification remains separate from this implementation checklist.
 
 ## Explicit blockers and exclusions
 

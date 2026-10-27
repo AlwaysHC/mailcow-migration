@@ -20,11 +20,10 @@ from .targets.mailcow import MailcowTarget
 from .targets.readiness import inspect_target_host
 from .transfers import require_mailcow_host
 
-SOURCE_TOOLS = {
-    SourceKind.POSTFIXADMIN: ("bash", "mysql", "mysqldump", "php", "postconf", "postfix", "postqueue", "postmap",
-                             "postcat", "doveconf", "doveadm", "rsync", "tar", "scp", "awk", "find", "wc"),
-    SourceKind.PLESK: ("python3", "plesk", "php", "postconf", "postfix", "postqueue", "postmap", "postcat", "doveconf", "doveadm", "rsync", "ip"),
-}
+COMMON_SOURCE_TOOLS = ("bash", "php", "postconf", "postfix", "postqueue", "postmap", "postcat", "doveconf", "doveadm",
+                       "rsync", "find", "mktemp", "od", "gzip", "wc", "rm", "awk")
+SOURCE_TOOLS = {SourceKind.POSTFIXADMIN: (*COMMON_SOURCE_TOOLS, "mysql", "mysqldump", "tar", "scp"),
+                SourceKind.PLESK: (*COMMON_SOURCE_TOOLS, "python3", "plesk", "ip")}
 
 
 def source_prerequisites(source: SourceConnection, directory: Path) -> None:

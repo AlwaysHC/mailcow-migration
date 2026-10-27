@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 from uuid import uuid4
 
-from .accounts import account_journal, run_accounts
+from .accounts import account_journal, activation_started, run_accounts
 from .activation import run_activation
 from .admins import run_admins
 from .assessment import assess_batch
@@ -263,8 +263,7 @@ class GuidedMigration:
         if (self.batch.directory / "completed.json").exists():
             return run_handoff(self.configuration, self.file, hostname=self.client_hostname(), action="check")
         state = self.accounts()
-        activation_started = state.get("activated") or "activationRequests" in state or "enable domain for activation" in state["done"]
-        if not activation_started:
+        if not activation_started(state):
             self.stage_and_copy()
         if self.accounts().get("activated") is not True:
             confirm_action("Confirm cutover readiness and stopped writers; "

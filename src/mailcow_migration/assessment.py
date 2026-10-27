@@ -4,8 +4,9 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
+from uuid import uuid4
 
-from .accounts import account_journal, run_accounts
+from .accounts import account_journal, activation_started, run_accounts
 from .configuration import Configuration
 from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace
@@ -17,7 +18,9 @@ from .plans.saved import load_saved_plan, validate_plan_inventory
 from .plans.saved_webmail import load_saved_webmail
 from .plans.security import account_security_policy
 from .plans.server_state import require_server_settings
+from .plans.transfer import transfer_assessment
 from .sogo_target import sogo_preparation
+from .source_drift import verify_source_plan
 from .sources import SourceKind
 from .sources.delivery import SourceDelivery
 from .sources.inventory import inspect_source
@@ -47,12 +50,10 @@ def assess_batch(
         batch = load_saved_plan(file, configuration, allow_blockers=True)
         checks = []
 
-        def check(name: str, operation: Callable[[], Any], *, false_blocks: bool = False) -> Any:
+        def check(name: str, operation: Callable[[], Any]) -> Any:
             print("Assessing " + name + "...", flush=True)
             try:
                 value = operation()
-                if false_blocks and value is False:
-                    raise MigrationError("The prerequisite did not pass; inspect its retained assessment")
             except (MigrationError, OSError) as error:
                 checks.append({"id": name, "status": "blocked", "detail": str(error)})
                 return None
@@ -70,10 +71,16 @@ def assess_batch(
         check("shared-server-settings", lambda: require_server_settings(batch, configuration))
         manifest = read_json(batch.directory / "manifest.json", private=True)
         evidence = check("source-export", lambda: load_plan_export(configuration, batch, exported or Path(manifest["export"])))
-        check("live-source-inventory", lambda: validate_plan_inventory(
-            batch.plan, inspect_source(batch.source, batch.plan["domain"]).inventory,
-        ))
+        source = check("live-source", lambda: inspect_source(batch.source, batch.plan["domain"]))
+        if source is not None:
+            check("live-source-inventory", lambda: validate_plan_inventory(batch.plan, source.inventory))
         target = MailcowTarget(configuration.mailcow)
+        if source is not None and phase == "before" and not batch.plan["blockers"]:
+            transfer = check("live-transfer-preview", lambda: transfer_assessment(
+                batch.plan, source, target, batch.directory / ("assessment-transfer-" + uuid4().hex), source_checks=True,
+            ))
+            if transfer is not None:
+                checks.extend({**row, "id": "transfer:" + row["id"]} for row in transfer["checks"])
         if phase in ("before", "staged"):
             check("target-password-schemes", lambda: check_password_support(batch.plan, target))
         storage = check("target-mail-volume", lambda: inspect_mail_storage(target))
@@ -93,15 +100,15 @@ def assess_batch(
             checks.append({"id": "storage-inodes", "status": "blocked" if filesystem.f_favail == 0 else "manual",
                            "detail": detail.format(filesystem.f_favail)})
         if phase == "before":
-            if state is not None and (state.get("activated") or "activationRequests" in state):
+            if state is not None and activation_started(state):
                 checks.append({"id": "phase", "status": "blocked", "detail": "Activation started; use activated or handoff assessment"})
             else:
+                check("source-account-filter-snapshot", lambda: verify_source_plan(batch, configuration))
                 check("target-staging-preview", lambda: run_accounts(configuration, file))
                 check("target-isolation-environment", lambda: TargetIsolation(target, batch).preflight(require_accounts=False))
                 if batch.source.kind is SourceKind.PLESK:
-                    source = PleskIsolation(batch, configuration)
-                    check("source-isolation-environment", lambda: source.request("inspect"))
-                    check("source-account-filter-snapshot", source.check_source)
+                    isolation_source = PleskIsolation(batch, configuration)
+                    check("source-isolation-environment", lambda: isolation_source.request("inspect"))
                 else:
                     if batch.plan["mailboxes"]:
                         check("source-login-environment", SourceLogins(batch).inspect)
@@ -120,7 +127,7 @@ def assess_batch(
         reviewed = (check("saved-webmail-proposal", lambda: load_saved_webmail(batch, evidence))
                     if evidence is not None and phase != "handoff" else None)
         prepared = check("sogo-preparation", lambda: sogo_preparation(configuration, batch)) if phase != "handoff" else None
-        if prepared is not None and reviewed is not None and phase != "handoff":
+        if prepared is not None and reviewed is not None:
             def capabilities() -> Mapping[str, Any]:
                 if reviewed.blockers:
                     raise MigrationError("\n".join(reviewed.blockers))
@@ -143,8 +150,8 @@ def assess_batch(
                     dates = timezone_parts(zone, [user["preferences"]["Vacation"][key] for user in native.values()
                                                   if "Vacation" in user["preferences"] for key in ("startDate", "endDate")])
                     verify_container_dates((prepared.target.command, runtime.command), dates, zone)
-                state = prepared.state()
-                return {"configuration_required": bool(missing or state and state["pending"])}
+                configuration_state = prepared.state()
+                return {"configuration_required": bool(missing or configuration_state and configuration_state["pending"])}
 
             capabilities_report = check("sogo-capabilities-timezones", capabilities)
             if capabilities_report and capabilities_report["configuration_required"]:
@@ -174,5 +181,7 @@ def assess_batch(
         return report
 
 
-def run_assessment(configuration: Configuration, file: Path, *, exported: Optional[Path] = None, phase: str = "before") -> int:
-    return int(not assess_batch(configuration, file, exported=exported, phase=phase)["ready_for_phase"])
+def run_assessment(
+    configuration: Configuration, file: Path, *, exported: Optional[Path] = None, phase: str = "before", hostname: Optional[str] = None,
+) -> int:
+    return int(not assess_batch(configuration, file, exported=exported, phase=phase, hostname=hostname)["ready_for_phase"])

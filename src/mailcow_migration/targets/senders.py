@@ -19,7 +19,7 @@ def sender_mailbox(username: str, mailboxes: Sequence[Mapping[str, Any]], *, ina
 def sender_allowed(mailbox: Mapping[str, Any], aliases: Sequence[Mapping[str, Any]], sender: str) -> bool:
     return (sender == mailbox["username"]
             or any(grant in mailbox["sender_acl"] for grant in (sender, "*", "@" + sender.rsplit("@", 1)[-1]))
-            or any(row.get("address") == sender and row.get("sender_allowed") in (True, 1, "1")
+            or any(row.get("address") == sender and api_number(row.get("active")) == 1 and row.get("sender_allowed") in (True, 1, "1")
                    and mailbox["username"] in [item.strip() for item in api_string(row.get("goto")).split(",")] for row in aliases))
 
 

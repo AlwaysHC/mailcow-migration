@@ -118,10 +118,16 @@ class GlobalPostfix:
 
     def command(self, arguments: Sequence[str]) -> str:
         return self.target.compose(("exec", "-T", "postfix-mailcow", *arguments),
+                                   secrets=self.secrets,
                                    diagnostic_file=self.directory / ("shared-postfix-" + uuid4().hex + ".txt")).stdout.strip()
+
+    @property
+    def secrets(self) -> tuple:
+        return tuple(row["credentials"]["password"] for row in self.rows if row.get("kind") == "relayhost")
 
     def lookup(self, key: str, map_name: str) -> str:
         result = self.target.compose(("exec", "-T", "postfix-mailcow", "postmap", "-q", key, map_name), allowed_codes=(0, 1),
+                                     secrets=self.secrets,
                                      diagnostic_file=self.directory / ("shared-lookup-" + uuid4().hex + ".txt"))
         if result.stderr.strip() or result.returncode and result.stdout.strip():
             raise MigrationError("Shared Postfix lookup failed; private diagnostics were retained")

@@ -84,6 +84,7 @@ The guide prompts before source isolation, target staging, copying, activation, 
 Confirm browser drafts, stopped writers, available disk space/inodes and backup readiness only after checking them.
 Default-Sieve use and replacement are explicit choices, initially disabled and pinned when the batch begins.
 Custom-identity configuration and missing SOGo user sources may require a shared webmail/DAV restart.
+User-source and cached-lookup preparation covers every batch mailbox, including users without a RoundCube profile.
 An empty confirmation or `q` pauses with exit code 2 and retains recovery evidence. Interruptions never imply automatic rollback.
 
 Resume the same `migrate DOMAIN --config FILE` command. Once activation starts, the guide skips staging and mail/Sieve copying.
@@ -95,6 +96,7 @@ An uncertain certificate refresh needs the explicit `certificate --action retry 
 `assess --phase before|staged|activated|handoff` consolidates the applicable findings and saves a private phase report.
 Before/staged checks cover identity, source evidence, quota/storage estimates, isolation prerequisites and SOGo capabilities.
 Native user-data conflicts are assessed after activation; handoff checks cover live DNS, TLS, signing, queues and receipts.
+Use `--hostname NAME` with handoff assessment when the chosen client hostname differs from `mail.DOMAIN`.
 Assessment can retain local evidence/backups and reconcile an observed pending receipt; it does not change mail-service settings.
 Capacity estimates do not reserve storage, and a successful phase assessment is not approval for later phases or proof of production readiness.
 
@@ -247,10 +249,10 @@ the PostfixAdmin dump includes the whole set of configuration tables to preserve
 diagnostics and exporter progress are saved in private diagnostic files when present, with their paths reported in the terminal.
 
 Export completion means the evidence was collected, not that it can be migrated. Plesk blockers are retained and counted.
-Account mapping, quota calculation and initial target checks are available through `plan`; full migration assessment remains pending.
+Account mapping, quota calculation and initial target checks are available through `plan`; `assess` adds phase-specific live findings.
 The inventory recheck does not establish that every source setting stayed unchanged throughout the export.
 Accounts, messages, mail-service configuration and Mailcow are
-not modified. RoundCube snapshots are collected separately by `roundcube-sessions`; full migration orchestration remains pending.
+not modified. RoundCube snapshots are collected separately by `roundcube-sessions`; `migrate` coordinates the guarded workflow.
 
 ## Shared server preparation
 
@@ -370,8 +372,10 @@ records `target_verified: false` and `selection_recorded: false`: apply and veri
 Its separate receipt records selections, exclusions, relay and administrator decisions. `transfer-plan.json` records the volume, vmail identity,
 capability checks and mailbox preview with `transfer_ready: false`. It does not verify account/transfer journals, stopped writers,
 activation state or available disk capacity. Paths and append compatibility must be rechecked under isolation before copying.
-Mail execution, webmail import and handoff are separate guarded commands. Guided migration orchestration remains pending.
-Source inventory rechecks do not prove all account settings stayed unchanged after export. Plans record a digest for
+Mail execution, webmail import and handoff are separate guarded commands, also coordinated by `migrate`.
+Before-phase assessment and the first activation attempt compare fresh source account/filter evidence with the original plan.
+PostfixAdmin comparisons ignore SQL row order and calculated target quotas; changed sections stop continuation with private evidence.
+Plesk checks its complete account/filter snapshot. These comparisons complement the stopped-writer requirement. Plans record a digest for
 their assessment. Planning does not resume an existing migration batch; retain its saved state and recovery evidence.
 
 ## Account staging and verification
@@ -427,7 +431,7 @@ leaving target accounts unchanged. Password-check diagnostics, when present, are
 `verify` requires completed staging receipts and compares domain limits, account activity, mailbox quotas/names/quarantine,
 aliases, alias domains, BCC and recovery emails with the saved plan and recorded activation phase, including interrupted activation.
 It does not test password login, messages, filters, sender permissions or delivery. Message copying and guarded activation are
-available separately; full source isolation and full migration recovery remain pending. Only this application's planning and
+available separately, with source isolation and resumable guided migration. Only this application's planning and
 account-journal formats are accepted. Keep other operation journals with the tool that created them.
 
 To explicitly compare stored mailbox hashes with the original plan, add `--passwords` to `verify`. It also checks required
@@ -932,8 +936,8 @@ The default `preview` action checks the configured source, required commands, ef
 It identifies whether the exact batch exclusion already exists and rejects exclusions that partially overlap these users.
 Only a single SQL passdb using `/etc/dovecot/dovecot-mysql.conf` is supported. The base password query must match the supported
 form; existing migration exclusions for other batches are retained. Wildcard mailbox names are rejected before remote commands.
-The plan's source connection must match its planning manifest and current configuration. Plesk requires its separate adapter,
-which remains pending; an alias-only batch with no mailbox logins needs no login operation.
+The plan's source connection must match its planning manifest and current configuration. Plesk uses `source-isolation`;
+an alias-only batch with no mailbox logins needs no login operation.
 
 After users have saved drafts and closed clients, `--action freeze --apply` excludes exactly the planned mailbox usernames,
 reloads Dovecot, clears their authentication caches and disconnects their sessions. Before changing logins, it checks the
@@ -1146,6 +1150,7 @@ forwarding and all recovery evidence until cached DNS routes expire. No command 
 | Module | Responsibility |
 | --- | --- |
 | `cli`, `wizard`, `configuration` | Entry point, interactive setup, immutable settings, and shared validation. |
+| `preparation`, `assessment`, `workflow`, `source_drift` | Guided preparation/migration, phase reports, pinned decisions and fresh source comparisons. |
 | `inspection`, `core.dns`, `sources.inventory` | Read-only source inventories, authoritative DNS agreement, and inspection reports. |
 | `exporting`, `sources.export` | Private source exports, inventory rechecks, completion manifests and file hashes. |
 | `planning`, `plans`, `sources.sql`, `sources.usage` | Account mapping, policy decisions, export validation and measured quotas. |
@@ -1180,9 +1185,21 @@ forwarding and all recovery evidence until cached DNS routes expire. No command 
 
 CLI errors use exit status 1, configuration/usage errors 2, interruption 130, and shared-lock contention 75.
 Library callers must hold the workspace lock and verify batch identity before journaled writes. Pending writes require
-reconciliation before proceeding. Account staging can resume its own recorded operations; full migration recovery remains planned work.
+reconciliation before proceeding. Guided resume follows existing receipts and never repeats staging/copying after activation intent.
 The API client verifies TLS, rejects redirects, and never retries writes automatically. Command diagnostics are private
 by default; callers may display known-safe output with explicit secret redaction.
+
+## Production readiness
+
+The feature implementation is complete within the documented compatibility boundaries, but this release remains pre-alpha.
+The final review covered operation ordering, interruption/resume guards, permission scope, private output, shared helpers,
+unused paths, naming and packaged resources. It corrected activation-intent checks, source-drift comparison, sender ACL readback,
+SOGo native-setting capability checks and stale operational guidance. Repeated logic uses shared implementations.
+
+This was a static review: no automated tests, compilation, linting, package installation or live migration was performed.
+Production readiness is therefore **not established**. Qualification still needs representative PostfixAdmin and Plesk pilot
+migrations on the supported Linux/Mailcow versions, interruption/recovery exercises, backup restoration checks and real client,
+message-content, delivery and authentication verification. Keep the pre-alpha classification until those results are recorded.
 
 - [Compatibility and dependencies](docs/compatibility.md) defines version boundaries and required capabilities.
 - [Feature roadmap](docs/features.md) tracks implemented capabilities, planned work, configurable decisions and blockers.

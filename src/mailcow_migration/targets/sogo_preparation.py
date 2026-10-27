@@ -162,8 +162,9 @@ class SogoPreparation:
     def inspect_users(self, *, prepare: bool = False) -> bool:
         config = self.preflight()
         results = []
+        lookup_users = self.batch.plan["mailboxes"]
         context = {"version": 1, **self.identity, "proposal_sha256": json_fingerprint(self.proposal, canonical=True), "import_ready": False}
-        attempt = self.file("user-preparation-" + uuid4().hex + ".json") if prepare and self.users else None
+        attempt = self.file("user-preparation-" + uuid4().hex + ".json") if prepare and lookup_users else None
 
         def save_preparation(phase: str, **details: Any) -> None:
             if attempt is not None:
@@ -172,13 +173,13 @@ class SogoPreparation:
         if attempt is not None:
             save_preparation("started")
             print("Private SOGo user-preparation record: {}".format(attempt))
-        missing = missing_user_sources(self.users, config)
+        missing = missing_user_sources(lookup_users, config)
         if missing and prepare:
             save_preparation("restart-pending", missing_user_sources=missing)
             print("SOGo user sources are missing for: " + ", ".join(missing))
             self.target.restart()
             config = self.preflight()
-            missing = missing_user_sources(self.users, config)
+            missing = missing_user_sources(lookup_users, config)
         if missing:
             save_preparation("blocked", missing_user_sources=missing)
             raise MigrationError("SOGo user sources are not loaded for: " + ", ".join(missing)
@@ -186,12 +187,17 @@ class SogoPreparation:
                                     "Inactive staging alone does not establish valid user sources." if prepare
                                     else ". Use prepare-users --apply to refresh sources when a shared SOGo restart is acceptable. "
                                     "Account activation remains a separate prerequisite."))
+        caches = {}
+        if prepare:
+            for user in lookup_users:
+                username = user["username"]
+                save_preparation("lookup-pending", username=username)
+                caches[username] = self.target.clear_unknown_user(username)
+                save_preparation("lookup-verified", username=username, cache=caches[username])
         for user in self.users:
-            cache = None
+            cache = caches.get(user["username"])
             try:
                 if prepare:
-                    save_preparation("lookup-pending", username=user["username"])
-                    cache = self.target.clear_unknown_user(user["username"])
                     save_preparation("backup-pending", username=user["username"], cache=cache)
                 backup = self.target.backup(user["username"])
                 current = check_preferences(backup, user, self.target.directory)

@@ -149,6 +149,8 @@ def run_senders(configuration: Configuration, file: Path, *, apply: bool = False
             if apply:
                 current = sender_mailbox(username, api.inventory("mailbox"), inactive=True)
                 require_sender_permissions(row, current, aliases)
+                if set(current["sender_acl"]) != set(payload["attr"]["sender_acl"]):
+                    raise MigrationError(username + ": sender edit returned unexpected grants; reconcile without widening the reviewed scope")
                 if security_flags(current) != row["security"]:
                     raise MigrationError(username + ": security attributes changed during the sender edit; journal retained")
         if apply:

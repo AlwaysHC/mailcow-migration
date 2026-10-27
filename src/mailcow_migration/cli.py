@@ -95,6 +95,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--quota-mib", type=int, metavar="N", help="Fixed quota for a new PostfixAdmin plan; pinned on resume")
         if name == "assess":
             command.add_argument("--phase", choices=("before", "staged", "activated", "handoff"), default="before")
+            command.add_argument("--hostname", help="Client hostname for handoff assessment; defaults to mail.DOMAIN")
             command.add_argument("--export", type=Path, metavar="DIR", help="Defaults to the original export recorded by planning")
         if name == "select-source":
             command.add_argument("--plan", type=Path, metavar="FILE", help="Original saved plan, including older batches outside the discovery tree")
@@ -218,7 +219,7 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
         if options.command == "migrate":
             return run_migration(configuration, options.domain, plan=options.plan, exported=options.export, fixed_quota=options.quota_mib)
         if options.command == "assess":
-            return run_assessment(configuration, options.plan, exported=options.export, phase=options.phase)
+            return run_assessment(configuration, options.plan, exported=options.export, phase=options.phase, hostname=options.hostname)
         if options.command == "inspect":
             return run_inspection(configuration, options.domain, options.output)
         elif options.command == "select-source":

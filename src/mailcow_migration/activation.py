@@ -14,6 +14,7 @@ from .plans.security import account_security_policy
 from .plans.server_state import require_server_settings
 from .plans.saved_webmail import load_saved_webmail
 from .senders import verify_senders
+from .source_drift import verify_source_plan
 from .targets.account_inventory import account_inventory
 from .targets.mailcow import MailcowTarget
 from .targets.passwords import verify_mailbox_passwords
@@ -64,6 +65,8 @@ def run_activation(
             print("Batch already activated; its account inventory matches the plan. Webmail import and release are separate.")
             return 0
         context.check_holds(target)
+        if "activationRequests" not in state:
+            verify_source_plan(batch, configuration)
         if context.final_state().get("sieveEvidenceHash") != SieveSource.read(batch.plan, evidence).fingerprint():
             raise MigrationError("Copied Sieve differs from the saved export; complete Sieve verification before activation")
         verify_mailbox_passwords(batch.plan, target, batch.directory)
