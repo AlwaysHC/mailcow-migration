@@ -2,7 +2,8 @@
 
 A Python CLI for preparing mail-domain migrations from PostfixAdmin and Plesk to an existing Mailcow installation.
 
-**Status: pre-alpha (`0.1.0.dev0`).** Configuration, inspection, exports, planning and inactive account staging are implemented.
+**Status: alpha (`0.1.0a1`).** Migration workflows are implemented; end-to-end validation is pending.
+Configuration, inspection, exports, planning and inactive account staging are implemented.
 Source selection checks saved batch ownership and can recognize recorded Mailcow addresses after activation and DNS handoff.
 Target isolation and PostfixAdmin login and delivery controls are available as separate operations.
 RoundCube source snapshots, SOGo proposals, session previews and guarded session revocation are also available.
@@ -1191,15 +1192,16 @@ by default; callers may display known-safe output with explicit secret redaction
 
 ## Production readiness
 
-The feature implementation is complete within the documented compatibility boundaries, but this release remains pre-alpha.
+The feature implementation is complete within the documented compatibility boundaries; this is an alpha release.
 The final review covered operation ordering, interruption/resume guards, permission scope, private output, shared helpers,
 unused paths, naming and packaged resources. It corrected activation-intent checks, source-drift comparison, sender ACL readback,
 SOGo native-setting capability checks and stale operational guidance. Repeated logic uses shared implementations.
 
-This was a static review: no automated tests, compilation, linting, package installation or live migration was performed.
+Validation so far includes static review and passing Ruff checks. Automated tests, compilation, package installation and live
+migration validation have not been performed.
 Production readiness is therefore **not established**. Qualification still needs representative PostfixAdmin and Plesk pilot
 migrations on the supported Linux/Mailcow versions, interruption/recovery exercises, backup restoration checks and real client,
-message-content, delivery and authentication verification. Keep the pre-alpha classification until those results are recorded.
+message-content, delivery and authentication verification. Keep the alpha classification until those results are recorded.
 
 - [Compatibility and dependencies](docs/compatibility.md) defines version boundaries and required capabilities.
 - [Feature roadmap](docs/features.md) tracks implemented capabilities, planned work, configurable decisions and blockers.

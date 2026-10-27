@@ -2,7 +2,7 @@
 
 The first release covers domain-by-domain mail migration from PostfixAdmin or Plesk to an existing Mailcow installation.
 Checked items are implemented. Unchecked items are not fully covered; notes distinguish implemented parts from remaining work.
-The pre-alpha supports configuration, source inspection, private exports, planning, staging and account verification.
+The alpha supports configuration, source inspection, private exports, planning, staging and account verification.
 PostfixAdmin isolation, mail/Sieve transfer, activation, quota recalculation and webmail import are available as explicit operations.
 Plesk isolation, mail/Sieve transfer, activation, quota recalculation and RoundCube import are also available.
 Explicit forwarding, certificate/signing setup, handoff checks and confirmed completion are available.
