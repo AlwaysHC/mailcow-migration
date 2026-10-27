@@ -103,15 +103,24 @@ Capacity estimates do not reserve storage, and a successful phase assessment is 
 
 ## Installation
 
-From this project directory on the Linux Mailcow host, using a Python 3.8 or newer environment with pip:
+Run the installer from this project directory on the Linux Mailcow host. It requires root and Python 3.8 or newer with venv support:
 
 ```bash
-python3 -m pip install .
-mailcow-migrate --version
+sudo bash install.sh
+sudo /usr/local/bin/mailcow-migrate --version
 ```
+
+The command is installed at `/usr/local/bin/mailcow-migrate`, with separate virtual environments under `/opt/mailcow-migration`.
+Previous installations are retained for rollback. Run operational commands from a root shell.
+See the [installation guide](docs/installation.md) for host prerequisites, download, configuration, credentials, first use, updates and rollback.
 
 There are no third-party runtime packages. Installation uses setuptools; the Python 3.8 build environment selects a
 compatible setuptools version below 75.4. See the [setuptools version history](https://setuptools.pypa.io/en/latest/history.html#v75-4-0).
+
+## Development environment
+
+See the [development guide](docs/development.md) for Windows and Linux setup, editable installation, VS Code configuration,
+formatting, linting and Python 3.8 compatibility requirements.
 
 ## Configuration workflow
 
