@@ -23,10 +23,19 @@ This snapshot has not been validated end to end.
 
 | Command | Available functionality |
 | --- | --- |
-| `configure` | Interactive setup for one or both sources and the Mailcow target. |
+| `configure` | Set up the migration environment. |
+| `check` | Verify the migration environment. |
+| `migrate` | Start or resume a domain migration. |
+
+These are the commands shown by `mailcow-migrate --help`. Start with the [installation guide](docs/installation.md).
+Use `mailcow-migrate COMMAND --help` for options or `mailcow-migrate --advanced-help` for individual operations.
+
+<details>
+<summary>Advanced operations for detailed review and recovery</summary>
+
+| Command | Available functionality |
+| --- | --- |
 | `check-config` | Local configuration validation. |
-| `prepare` | Check configured sources and Mailcow; `--guided` reviews private credential setup and shared server settings. |
-| `migrate` | Guide a domain through planning, isolation, copying, activation, webmail and confirmed handoff; resume its original batch. |
 | `assess` | Save a consolidated read-only assessment for the before, staged, activated or handoff phase. |
 | `inspect` | Source inventories, Maildir checks and authoritative DNS checks. |
 | `select-source` | Select the source using live evidence and saved journals; recognize recorded target addresses after activation. |
@@ -55,6 +64,8 @@ This snapshot has not been validated end to end.
 | `quota` | Recalculate usage for planned active mailboxes after activation, bound to the copied mail volume. |
 | `webmail` | Preview or import approved RoundCube data, editable filters and native settings; retain isolation and verified completion receipts. |
 
+</details>
+
 The minimum interpreter is Python 3.8. The application uses the Python standard library, with bundled source-server helpers
 and external mail/transfer commands where required. Production qualification requires representative staging and recovery runs.
 
@@ -65,16 +76,22 @@ and migration state model. Runtime helpers are included in this package.
 ## Guided operation
 
 ```bash
-mailcow-migrate prepare --config migration.json
-mailcow-migrate prepare --config migration.json --guided
+mailcow-migrate configure --config migration.json
 mailcow-migrate migrate example.org --config migration.json
-mailcow-migrate assess --config migration.json --plan /root/mailcow-in-progress/plans/example.org/BATCH/plan.json --phase before
 ```
 
-Run preparation on the Linux Mailcow host as root. The first command checks tools, source database access, Mailcow services
-and API access without changing either mail service. The guided variant can create a missing private source MySQL option file,
-prompt for a missing API key without echoing it, and review/apply shared PostfixAdmin settings. It contacts only configured sources.
-Credential files already present are retained. Shared Postfix changes and server-administrator choices require explicit approval.
+Run these commands on the Linux Mailcow host as root. `configure` handles the complete interactive setup;
+after it succeeds, use `migrate` to start a domain migration.
+
+`configure` saves each answer and asks whether to continue or overwrite when saved configuration exists. It checks tools, source database access,
+Mailcow services and API access, contacting only configured sources. It can create a missing private source MySQL option
+file and prompt for a missing API key without echoing it. Existing credential files are retained. Applicable shared
+PostfixAdmin settings and server-administrator choices are reviewed and require explicit approval before changes.
+
+Use `check --config FILE` whenever you only want to recheck readiness and save diagnostics. It does not create credentials
+or change mail-service settings. `check-config --config FILE` only validates the configuration file locally.
+The former `prepare` command is now `check`. For the former `prepare --guided` workflow, use `configure --config FILE` instead.
+Neither `configure` nor `check` starts a domain migration. `migrate` always guides the user with confirmations.
 
 The domain guide exports and plans a new batch or resumes its saved plan. Optional `--plan FILE`, `--export DIR` and
 `--quota-mib N` reuse existing evidence or select a fixed quota for a new PostfixAdmin plan. Review the private summary and policy;
@@ -129,26 +146,37 @@ mailcow-migrate configure --config migration.json
 mailcow-migrate check-config --config migration.json
 ```
 
-The wizard first asks whether to configure PostfixAdmin, Plesk, or both. It collects only the selected source connections,
-the Mailcow installation/API, credential-file paths, optional SSH and
-RoundCube paths, quota/policy settings, and default quarantine notification frequency/category. Hosts and the API origin
-are entered explicitly. Defaults are displayed; Enter accepts a default and `q` cancels. The optional PostfixAdmin RoundCube path can be left
-unset for the later webmail workflow to resolve.
+For a new file, the wizard first asks whether to configure PostfixAdmin, Plesk, or both. It collects only the selected source connections,
+the Mailcow installation/API, credential-file paths, RoundCube installation paths, optional SSH configuration,
+quota/policy settings, and default quarantine notification frequency/category. Hosts and the API origin
+are entered explicitly. Defaults are displayed; Enter accepts a default and `q` pauses, retaining saved answers.
+The RoundCube installation directory is required for each selected source and must contain `config/config.inc.php`.
+It is saved during configuration and reused across domain migrations; migration does not ask for the path again.
+For older configurations or drafts with a missing, empty or null PostfixAdmin `roundcube_directory`, enter the actual path
+in that file before continuing, or choose overwrite in `configure` to restart setup.
 
-The resulting versioned JSON is written atomically with mode 600. An existing file is never overwritten by the wizard.
-Credential files are referenced by path; the wizard does not create or inspect them. MySQL credentials refer to a file on
-the PostfixAdmin source, while API-key, SSH-configuration, and policy paths refer to the Mailcow host.
+Each validated answer is saved atomically with mode 600 in `FILE.draft.json` beside the requested configuration file.
+On restart, choose `continue` to resume at the first unanswered question, or `overwrite` to start new answers.
+When both a draft and a completed configuration exist, continuing resumes the draft. With only a completed configuration,
+continuing loads it and proceeds to server setup. `q`, interrupted input and Ctrl+C retain previously saved answers.
+The final configuration is written only after all answers are complete and valid, then the draft is removed.
+Choosing overwrite replaces the draft as new answers are entered; the previous final configuration remains until completion.
+Setup then checks readiness, helps create missing credentials and reviews applicable shared settings for approval.
+MySQL credentials refer to a file on the PostfixAdmin source, while API-key, SSH-configuration, and policy paths refer to the Mailcow host.
+If setup pauses or reports blockers, retain the file and journals, resolve the blockers and rerun the same `configure` command.
 
-See [the PostfixAdmin-only example](examples/migration.example.json) for the file format. Omit an unused source section
+See [the PostfixAdmin-only example](examples/migration.example.json) for the file format. Fill in `source_mail_root` and
+`roundcube_directory` with the actual absolute paths on your source server; the example leaves these required values empty deliberately.
+Omit an unused source section
 or set it to `null`; at least one source must be configured. Existing configurations containing both remain valid.
 Only configured sources are candidates for inspection. Edit an existing configuration and
 run `check-config` to validate its structure and values. Validation does not contact servers or establish dependency,
-credential, or migration readiness. Server-side state is not changed by either command.
+credential, or migration readiness. `check-config` does not change server-side state; `configure` can apply explicitly approved setup changes.
 
 Every operational command loads the selected file once through the shared loader before dispatch. Both the installed command
 and `python3 -m mailcow_migration` use this entry point. Missing, unreadable, malformed or invalid files stop before server work
 with configuration-error status 2 and guidance to correct the file or run `configure`; explicit source hosts and the Mailcow API
-origin are required. The `configure` command creates a new file without attempting to load it first. Existing defaults and
+origin are required. `configure` creates a missing file or loads an existing one before continuing setup. Existing defaults and
 saved-plan/journal identity checks continue to apply.
 
 Quarantine defaults live in `migration.quarantine_notification` (`never`, `hourly`, `daily`, `weekly`) and

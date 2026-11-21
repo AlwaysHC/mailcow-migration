@@ -119,7 +119,7 @@ def source_database(
     return result
 
 
-def run_preparation(configuration: Configuration, *, guided: bool = False) -> int:
+def run_preparation(configuration: Configuration, *, setup: bool = False) -> int:
     require_mailcow_host()
     workspace = Workspace()
     with workspace.lock():
@@ -164,9 +164,9 @@ def run_preparation(configuration: Configuration, *, guided: bool = False) -> in
                 if source.kind is SourceKind.POSTFIXADMIN:
                     database = source_database(source, diagnostics)
                     if not database["exists"]:
-                        if not guided:
+                        if not setup:
                             raise MigrationError(
-                                "Private source database options are missing; prepare interactively or supply the configured file"
+                                "Private source database options are missing; run configure --config FILE or supply the configured file"
                             )
                         confirm_action(
                             f"Create {source.mysql_option_file} on {source.ssh.host} "
@@ -191,7 +191,7 @@ def run_preparation(configuration: Configuration, *, guided: bool = False) -> in
                     }
                 )
         key_file = local_path(Path(configuration.mailcow.api_key_file))
-        if not key_file.exists() and guided:
+        if not key_file.exists() and setup:
             if not sys.stdin.isatty():
                 raise MigrationError(
                     "Use an interactive terminal or supply the private API key file; an echoed password prompt is not allowed"
@@ -233,8 +233,16 @@ def run_preparation(configuration: Configuration, *, guided: bool = False) -> in
         write_private_json(directory / "checks.json", report, replace=True)
         for row in checks:
             print("[{}] {}: {}".format(row["status"], row["id"], row["detail"]))
-        if not report["complete"] or not guided:
-            return int(not report["complete"])
+        if not report["complete"]:
+            print(
+                "Resolve the reported blockers, then rerun configure --config FILE to complete setup."
+            )
+            return 1
+        if not setup:
+            print(
+                "Readiness checks passed. No credentials or mail-service settings were changed."
+            )
+            return 0
         if configuration.postfixadmin is not None:
             source = server_source(configuration)
             state_directory = server_directory(source, configuration)
@@ -282,6 +290,6 @@ def run_preparation(configuration: Configuration, *, guided: bool = False) -> in
             )
             run_server_settings(configuration, exported, action="apply", apply=True)
         print(
-            "Server prerequisites and applicable shared settings are prepared. Domain migration remains a separate guided operation."
+            "Setup is complete. Start a domain migration with migrate DOMAIN --config FILE."
         )
     return 0

@@ -104,14 +104,14 @@ class SourceConfiguration:
 
 @dataclass(frozen=True)
 class PostfixAdminConfiguration(SourceConfiguration):
-    source_mail_root: str = option("PostfixAdmin mail root", "/var/posta", mail_root)
+    source_mail_root: str = option("PostfixAdmin mail root", "", mail_root)
     mysql_option_file: str = option(
-        "MySQL credentials file on the source",
+        "MySQL credentials file on the source (created with approval during setup if missing)",
         "/root/migration-mysql.cnf",
         absolute_path,
     )
-    roundcube_directory: Optional[str] = option(
-        "RoundCube directory on the source (optional)", None, optional_path
+    roundcube_directory: str = option(
+        "RoundCube installation directory on the source", "", absolute_path
     )
 
 

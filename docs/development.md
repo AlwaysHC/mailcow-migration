@@ -124,6 +124,12 @@ Application code is under `src/mailcow_migration`; the module entry point is `py
 command is `mailcow-migrate`. Bundled Python, PHP and shell helpers are under `src/mailcow_migration/resources`.
 See [Package layout](../README.md#package-layout) for the main components.
 
+The default `--help` shows only the main workflow. Use `python -m mailcow_migration --advanced-help` with the environment's
+interpreter to list all component operations, and `python -m mailcow_migration COMMAND --help` for their options.
+`configure` creates or reuses configuration and runs interactive credential setup, readiness checks and approved shared settings.
+`check` verifies the migration environment; `migrate` runs the interactive domain workflow. No `--guided` flag is needed or supported.
+See the [setup guide](installation.md#3-configure-the-migration).
+
 After pulling changes, the editable installation picks up Python source edits. If package metadata, entry points or build
 requirements change, repeat the editable install command with the same environment's Python. Recreate the environment
 when changing its base interpreter; virtual environments should not be moved between paths or machines.

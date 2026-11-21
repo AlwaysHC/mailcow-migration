@@ -9,8 +9,8 @@ umask 077
 trap 'printf "Export stopped at line %s. Existing files were retained; this export is incomplete.\n" "$LINENO" >&2' ERR
 
 usage() {
-  printf 'Usage: bash export-domain.sh DOMAIN|--server OUTPUT_DIR [MYSQL_OPTION_FILE] [DATABASE] [MAIL_ROOT]\n'
-  printf 'Example: bash export-domain.sh example.org /root/mailcow-in-progress/exports/example.org /root/.my.cnf postfix /var/posta\n'
+  printf 'Usage: bash export-domain.sh DOMAIN|--server OUTPUT_DIR MYSQL_OPTION_FILE DATABASE MAIL_ROOT\n'
+  printf 'Example: bash export-domain.sh example.org /root/mailcow-in-progress/exports/example.org /root/.my.cnf postfix /path/to/mail\n'
 }
 completed=0
 steps=10
@@ -23,7 +23,7 @@ step() {
   printf 'Export [%s] %d%% %d/%d %s\n' "$bar" "$((completed * 100 / steps))" "$completed" "$steps" "$1" >&2
 }
 if [[ "${1:-}" == '--help' ]]; then usage; exit 0; fi
-if (( $# < 2 || $# > 5 )); then usage >&2; exit 2; fi
+if (( $# != 5 )); then usage >&2; exit 2; fi
 domain="$1"
 scope=domain
 if [[ "$domain" == '--server' ]]; then scope=server; steps=9; fi
@@ -34,7 +34,7 @@ work_root="${MAILCOW_WORK_ROOT:-/root/mailcow-in-progress}"
 }
 options="${3:-}"
 database="${4:-postfix}"
-mail_root="${5:-/var/posta}"
+mail_root="$5"
 if [[ "$scope" == domain ]]; then
   [[ "$domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ && "$domain" == *.* && "$domain" != *..* ]] || {
     printf 'Invalid domain: %s\n' "$domain" >&2; exit 2;
@@ -60,7 +60,7 @@ if ! count="$("${mysql_command[@]}" -N -B "$database" -e "$query")"; then
   printf 'MySQL connection or configuration query failed; no export directory was created.\n' >&2
   printf 'Linux root does not automatically authenticate as MySQL root.\n' >&2
   printf 'Pass a protected MySQL [client] option file as argument 3; prepare-server.sh explains how to create it.\n' >&2
-  printf 'Example: bash export-domain.sh %s %s /root/migration-mysql.cnf\n' "$domain" "$output" >&2
+  printf 'Example: bash export-domain.sh %q %q /root/migration-mysql.cnf %q %q\n' "$domain" "$output" "$database" "$mail_root" >&2
   exit 1
 fi
 if [[ "$scope" == domain ]]; then

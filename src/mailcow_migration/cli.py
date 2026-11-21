@@ -2,7 +2,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence, TypedDict, Union
 
 from . import __version__
 from .accounts import run_accounts
@@ -41,30 +41,63 @@ from .workflow import run_migration
 logger = logging.getLogger(__name__)
 
 
-def parser() -> argparse.ArgumentParser:
+class CommandHelpOptions(TypedDict, total=False):
+    help: str
+
+
+class AdvancedHelpAction(argparse.Action):
+    def __call__(
+        self,
+        argument_parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Optional[Union[str, Sequence[Any]]],
+        option_string: Optional[str] = None,
+    ) -> None:
+        parser(advanced_help=True).print_help()
+        argument_parser.exit()
+
+
+def parser(*, advanced_help: bool = False) -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog="mailcow-migrate",
-        description="Prepare domain migration from PostfixAdmin and Plesk to Mailcow.",
-        epilog="Use prepare --guided for server preparation and migrate DOMAIN for the guided domain workflow. "
-        "Explicit component commands remain available for review, guarded changes and recovery.",
+        description="Migrate mail domains from PostfixAdmin and Plesk to Mailcow.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Getting started:\n"
+        "  mailcow-migrate configure --config migration.json\n"
+        "  mailcow-migrate migrate example.org --config migration.json\n\n"
+        "configure guides setup, including credentials, readiness checks and approved shared settings.\n"
+        "Use check --config FILE to verify the environment again after setup.\n"
+        "migrate always guides you through the domain migration with confirmations.\n"
+        "Use COMMAND --help for command options, or --advanced-help for all operations.",
     )
     result.add_argument(
         "--version", action="version", version="%(prog)s " + __version__
     )
-    commands = result.add_subparsers(dest="command", required=True)
+    result.add_argument(
+        "--advanced-help",
+        action=AdvancedHelpAction,
+        nargs=0,
+        help="Show all commands, including individual migration and recovery operations",
+    )
+    commands = result.add_subparsers(
+        dest="command", required=True, metavar="COMMAND", title="commands"
+    )
     for name, description in (
-        ("configure", "Generate configuration interactively on the Linux Mailcow host"),
+        (
+            "configure",
+            "Set up the migration environment",
+        ),
         (
             "check-config",
             "Validate a configuration file locally without contacting servers",
         ),
         (
-            "prepare",
-            "Check configured source/target prerequisites; optionally guide shared server preparation",
+            "check",
+            "Verify the migration environment",
         ),
         (
             "migrate",
-            "Guide a domain through reviewed planning, isolation, import, activation and verified handoff",
+            "Start or resume a domain migration",
         ),
         (
             "assess",
@@ -172,7 +205,12 @@ def parser() -> argparse.ArgumentParser:
             "Preview, import or verify reviewed domain administrators while preserving existing memberships and security",
         ),
     ):
-        command = commands.add_parser(name, help=description, description=description)
+        help_options: CommandHelpOptions = (
+            {"help": description}
+            if advanced_help or name in ("configure", "check", "migrate")
+            else {}
+        )
+        command = commands.add_parser(name, description=description, **help_options)
         command.add_argument(
             "--config",
             type=Path,
@@ -191,11 +229,19 @@ def parser() -> argparse.ArgumentParser:
                 metavar="FILE",
                 help="Save a private JSON report to a new file",
             )
-        if name == "prepare":
-            command.add_argument(
-                "--guided",
-                action="store_true",
-                help="Prompt for source DB options, missing API key and shared settings",
+        if name == "configure":
+            command.epilog = (
+                "Save each answer as you enter it. If saved configuration exists, choose continue or overwrite. "
+                "Continue resumes unanswered questions or proceeds with completed configuration. Check server readiness, "
+                "help create missing credentials, and review applicable shared PostfixAdmin settings "
+                "before approving changes. Run on the Linux Mailcow host as root. "
+                "Domain migration starts separately with migrate DOMAIN."
+            )
+        if name == "check":
+            command.epilog = (
+                "Check tools, source database access, Mailcow services and API access; save diagnostics "
+                "without creating credentials or changing mail-service settings. "
+                "Use configure --config FILE to complete or resume interactive setup."
             )
         if name == "migrate":
             command.add_argument(
@@ -608,11 +654,11 @@ def main(arguments: Optional[Sequence[str]] = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     try:
         if options.command == "configure":
-            configure(options.config)
-            return 0
+            configuration = configure(options.config)
+            return run_preparation(configuration, setup=True)
         configuration = load_configuration(options.config)
-        if options.command == "prepare":
-            return run_preparation(configuration, guided=options.guided)
+        if options.command == "check":
+            return run_preparation(configuration)
         if options.command == "migrate":
             return run_migration(
                 configuration,

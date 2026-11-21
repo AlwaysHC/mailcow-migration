@@ -20,17 +20,18 @@ Inactive forwarding/vacation prefilter staging is available separately, with exa
 Explicit sender-permission staging and read-only verification are also available.
 Domain administrator preview/import/check supports reviewed PostfixAdmin mappings and preserves existing target memberships/security.
 Plesk source isolation, mail/Sieve transfer, activation, quota recalculation and native RoundCube import are implemented;
-PostfixAdmin submission checks and guarded forwarding/handoff are implemented, with guided preparation and domain orchestration.
+PostfixAdmin submission checks and guarded forwarding/handoff are implemented, with interactive setup and domain orchestration.
 The configuration wizard writes versioned JSON that
 supplies source/target settings through a shared loader.
-All operational CLI commands pass the same loader before dispatch; the wizard remains the file-creation path.
+All operational CLI commands use the same configuration validation; the wizard creates a missing file or loads an existing one.
+`configure` then runs credential setup, readiness checks and approval of applicable shared settings.
 Invalid configuration stops before remote work with status 2 and repair/`configure` guidance. Shared validation and defaults
 apply equally to the installed entry point and module invocation.
 PostfixAdmin and Plesk are independently optional: configure at least one. Source-specific dependencies and checks apply
 only to configured sources; an unconfigured server does not need to exist or be reachable.
 The `inspect` command uses local OpenSSH and `dig`, remote Bash/`hostname -I` and filesystem access, plus the PostfixAdmin
 MySQL client or Plesk Python/CLI database access. It checks source inventories and current authoritative DNS routing;
-`prepare` adds source/target prerequisites and `migrate` coordinates the guarded domain workflow.
+`check` verifies source/target prerequisites and `migrate` coordinates the guarded domain workflow.
 
 `select-source` adds saved-plan/configuration validation, batch discovery and cross-source operation-journal checks under the
 shared lock. It requires root on the Mailcow host. Recording target addresses additionally needs Docker Compose, running
@@ -89,6 +90,21 @@ restoration for the same plan and target, without pending operations. It retains
 separate repair journal and reuses guard files only when their content matches the intended guard or prior recorded final content.
 Readiness and restoration select an existing repair journal without falling back to the original. Source isolation and webmail
 import prerequisites still apply independently for each source adapter.
+
+## Mailcow 2026-11 review
+
+The migration reads existing sync jobs and changes only their `active` flag; it does not create jobs or depend on the removed
+`host1`, `port1`, `enc1` or `authmech1` API fields. Isolation requires valid `active` and `is_running` flags and refuses to
+proceed while a batch job is claimed or running. Process checks recognize both bare mailbox logins and Mailcow's
+`mailbox*master-user` logins, including parallel workers. The master-login format also exists in 2026-10.
+
+Existing API service keys remain supported. Mail copying uses rsync, and native SOGo imports use container commands;
+neither transfers mail through the HTTP API. The migration nginx guard returns 503 and does not accept uploads.
+For SOGo/EAS/DAV, keep `NGINX_MAX_BODY_SIZE` above the effective Postfix `message_size_limit` when changing server limits.
+The release defaults to `128m` for these services and `64m` for UI/API requests.
+
+This source review and focused isolation checks do not certify a live deployment or SOGo 5.12.13 import/recovery end to end.
+See the [release notes](https://github.com/mailcow/mailcow-dockerized/releases/tag/2026-11).
 
 ## Initial compatibility matrix
 

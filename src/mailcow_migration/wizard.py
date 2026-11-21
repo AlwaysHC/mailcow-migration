@@ -1,4 +1,3 @@
-import sys
 from dataclasses import Field, fields
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
@@ -9,16 +8,19 @@ from .configuration import (
     SOURCE_SECTIONS,
     Configuration,
     configuration_from_document,
+    load_configuration,
     section_label,
 )
 from .core.errors import ConfigurationError
-from .core.storage import local_path, write_private_json
+from .core.prompts import WorkflowPaused
+from .core.storage import local_path, read_json, write_private_json
+from .transfers import require_mailcow_host
 
 
 def ask_value(prompt: str, ask: Callable[[str], str]) -> str:
     entered = ask(prompt).strip()
     if entered == "q":
-        raise ConfigurationError("Configuration cancelled; no file was written")
+        raise WorkflowPaused("Configuration paused; saved answers are retained.")
     return entered
 
 
@@ -65,37 +67,99 @@ def ask_option(
             )
 
 
+def resume_configuration(
+    path: Path, ask: Callable[[str], str], tell: Callable[[str], None]
+) -> bool:
+    tell(f"Saved configuration found: {path}")
+    while True:
+        choice = ask_value(
+            "Continue saved setup or overwrite with new answers? [continue/overwrite/q]: ",
+            ask,
+        ).lower()
+        if choice in ("continue", "overwrite"):
+            return choice == "continue"
+        tell("Enter continue, overwrite, or q to quit.")
+
+
+def load_draft(path: Path) -> Dict[str, Any]:
+    document = read_json(path, private=True)
+    if (
+        not isinstance(document, dict)
+        or document.get("version") != CONFIGURATION_VERSION
+    ):
+        raise ConfigurationError(f"Invalid configuration draft version: {path}")
+    if set(document) - {"version", *(name for name, _ in SECTIONS)}:
+        raise ConfigurationError(f"Unknown configuration draft sections: {path}")
+    if not any(name in document for name, _ in SOURCE_SECTIONS):
+        raise ConfigurationError(f"Configuration draft has no selected source: {path}")
+    for name, schema in SECTIONS:
+        if name not in document:
+            continue
+        section = document[name]
+        definitions = {item.name: item for item in fields(schema)}
+        if not isinstance(section, dict) or set(section) - definitions.keys():
+            raise ConfigurationError(f"Invalid configuration draft section: {name}")
+        for key, value in section.items():
+            try:
+                definitions[key].metadata["validate"](value)
+            except ConfigurationError as error:
+                raise ConfigurationError(
+                    f"{section_label(name)}.{key}: {error}"
+                ) from error
+    return document
+
+
 def configure(
     path: Path, ask: Callable[[str], str] = input, tell: Callable[[str], None] = print
 ) -> Configuration:
-    if sys.platform != "linux":
-        raise ConfigurationError(
-            "Run the configuration wizard on the Linux Mailcow host"
-        )
+    require_mailcow_host()
     destination = local_path(path)
-    if destination.exists():
-        raise ConfigurationError(
-            f"Configuration already exists; edit it or choose a new --config path: {destination}"
-        )
+    draft = destination.with_name(destination.name + ".draft.json")
+    existing_configuration = destination.exists()
+    existing_draft = draft.exists()
+    document: Dict[str, Any] = {}
+    if existing_draft or existing_configuration:
+        if resume_configuration(draft if existing_draft else destination, ask, tell):
+            if not existing_draft:
+                return load_configuration(destination)
+            document = load_draft(draft)
+        else:
+            tell(
+                "Starting new answers. The final configuration is replaced only when all answers are complete."
+            )
     tell(
-        "Configure the source systems you use. Enter keeps a displayed default; q cancels."
+        "Configure the source systems you use. Enter keeps a displayed default; q pauses and retains saved answers."
     )
     tell(
-        "Credential paths refer to existing files; do not enter passwords or API keys here."
+        "Enter credential file paths here, not passwords or API keys. Missing credentials are handled after saving."
     )
-    selected_sources = ask_sources(ask, tell)
-    skipped_sources = {name for name, _ in SOURCE_SECTIONS} - set(selected_sources)
-    document = {"version": CONFIGURATION_VERSION}
+    if not document:
+        selected_sources = ask_sources(ask, tell)
+        document = {
+            "version": CONFIGURATION_VERSION,
+            **{name: {} for name in selected_sources},
+        }
+        write_private_json(draft, document, replace=existing_draft)
+    tell(f"Answers are saved after each entry to {draft}.")
+    skipped_sources = {name for name, _ in SOURCE_SECTIONS} - document.keys()
     for name, schema in SECTIONS:
         if name in skipped_sources:
             continue
-        tell(f"\n{section_label(name)} settings")
-        document[name] = {
-            item.name: ask_option(item, ask, tell) for item in fields(schema)
-        }
+        section = document.get(name, {})
+        unanswered = tuple(item for item in fields(schema) if item.name not in section)
+        if unanswered:
+            tell(f"\n{section_label(name)} settings")
+        for item in unanswered:
+            value = ask_option(item, ask, tell)
+            section = {**section, item.name: value}
+            document = {**document, name: section}
+            write_private_json(draft, document, replace=True)
     configuration = configuration_from_document(document)
-    write_private_json(destination, configuration.document())
+    write_private_json(
+        destination, configuration.document(), replace=existing_configuration
+    )
+    draft.unlink()
     tell(
-        f"\nConfiguration saved to {destination}. Credential files and server connectivity have not been checked."
+        f"\nConfiguration saved to {destination}. Continuing with credentials and server readiness checks."
     )
     return configuration

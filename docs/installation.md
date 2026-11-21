@@ -21,7 +21,7 @@ sudo apt-get install git python3-venv ca-certificates openssh-client rsync dnsut
 
 Mailcow and Docker Compose must already be installed and working. Arrange SSH authentication to each selected source host,
 verify its SSH host key, and allow access to the Mailcow API. Source-specific requirements are listed in
-[Compatibility and dependencies](compatibility.md#external-commands-and-access); `prepare` checks the configured systems.
+[Compatibility and dependencies](compatibility.md#external-commands-and-access); `check` verifies the configured systems.
 
 ## 2. Download and install
 
@@ -74,7 +74,6 @@ From a root shell:
 
 ```bash
 mailcow-migrate configure --config /root/mailcow-in-progress/migration.json
-mailcow-migrate check-config --config /root/mailcow-in-progress/migration.json
 ```
 
 The wizard asks which sources to use: PostfixAdmin, Plesk, or both. Have the following information ready:
@@ -82,31 +81,44 @@ The wizard asks which sources to use: PostfixAdmin, Plesk, or both. Have the fol
 - Source SSH hostnames and any SSH configuration file needed for authentication.
 - The local Mailcow directory, usually `/opt/mailcow-dockerized`, and its HTTPS API URL.
 - The local path where the Mailcow API key will be stored.
-- For PostfixAdmin, the source mail directory and source-side MySQL option-file path.
-- Optional RoundCube installation paths and any reviewed migration policy file.
+- For PostfixAdmin, the actual absolute source mail directory (required; no default) and source-side MySQL option-file path.
+- The RoundCube installation directory on each source, containing `config/config.inc.php`; saved once and reused for all its domains.
+- Any reviewed migration policy file (optional).
 
-The wizard writes a private configuration file and creates missing parent directories. It does not overwrite an existing
-configuration or create credentials. On an existing installation, edit the retained configuration if needed and run
-`check-config`. That command validates configuration locally; it does not prove connectivity or server readiness.
+The wizard saves each validated answer immediately in a private draft beside the configuration, for example
+`/root/mailcow-in-progress/migration.json.draft.json`. It creates missing parent directories.
+If saved configuration exists, it asks you to enter `continue`, `overwrite`, or `q`:
 
-## 4. Prepare credentials and check services
+- `continue` resumes a draft at the first unanswered question. If only a completed configuration exists, it proceeds to server setup.
+- `overwrite` restarts the questions and saves new answers to the draft. An existing final configuration is replaced only after all answers are complete.
+- `q` exits and retains saved answers. Previously saved answers also survive Ctrl+C or interrupted input.
 
-To check existing credentials and prerequisites:
+After all answers are complete and valid, the wizard writes the final configuration atomically and removes the draft.
+Both files use owner-only permissions. Keep the draft private alongside the configuration.
+
+The same command then checks tools, source database access, Mailcow services and API access. It can prompt for a missing
+API key without echoing it and, with approval, create a missing private source MySQL option file. Existing credentials are
+retained. After the prerequisite checks pass, applicable shared PostfixAdmin settings and server-administrator choices are
+reviewed; applying changes requires explicit approval and may reload shared Postfix services.
+
+If setup pauses or reports blockers, resolve them and rerun the same `configure` command. Keep its configuration and journals;
+completed setup work is retained. To change connection details, edit the retained configuration before rerunning setup.
+Successful setup does not start a domain migration; continue with step 5.
+
+## 4. Optional readiness checks
+
+`configure` already checks readiness. To repeat those checks later without entering the setup workflow:
 
 ```bash
-mailcow-migrate prepare --config /root/mailcow-in-progress/migration.json
+mailcow-migrate check --config /root/mailcow-in-progress/migration.json
 ```
 
-Preparation checks configured tools, source database access, Mailcow services and API access. It saves local diagnostics
-without changing mail-service settings. If credentials still need preparation, use the guided workflow:
+`check` verifies tools, source database access, Mailcow services and API access. It saves diagnostics and reports blockers
+without creating credentials or changing mail-service settings. If setup is incomplete, rerun `configure --config FILE`.
 
-```bash
-mailcow-migrate prepare --config /root/mailcow-in-progress/migration.json --guided
-```
-
-The guided workflow can prompt for a missing API key without echoing it and create a missing private source MySQL option
-file. Existing credential files are retained. It also offers shared server-setting changes, with explicit approval before
-applying them. Resolve reported blockers before proceeding.
+For local configuration validation only, use `mailcow-migrate check-config --config FILE`; it does not contact servers.
+The former `prepare` command is now `check`; the former `prepare --guided` workflow is part of `configure`. `migrate` always
+provides an interactive domain workflow with confirmations.
 
 ## 5. Migrate a pilot domain
 
@@ -119,6 +131,10 @@ mailcow-migrate migrate example.org --config /root/mailcow-in-progress/migration
 The guide handles export, planning, isolation, copying, activation, webmail and handoff with operator confirmations.
 Review its saved summary and policies, and confirm backups, capacity and stopped writers only after checking them.
 DNS changes remain manual. See [Guided operation](../README.md#guided-operation) for the operational boundaries.
+
+`mailcow-migrate --help` shows the main workflow commands. Use `mailcow-migrate migrate --help` for migration options.
+Individual operations for detailed review and recovery are listed only with `mailcow-migrate --advanced-help`;
+their own `COMMAND --help` remains available directly.
 
 To resume, run the same command with the same configuration and retained batch state. Pausing does not undo completed
 operations. Preserve `/root/mailcow-in-progress`, its private credentials, and the recovery paths reported on source hosts.
@@ -135,7 +151,7 @@ git log -1 --oneline
 bash install.sh
 mailcow-migrate --version
 mailcow-migrate check-config --config /root/mailcow-in-progress/migration.json
-mailcow-migrate prepare --config /root/mailcow-in-progress/migration.json
+mailcow-migrate check --config /root/mailcow-in-progress/migration.json
 ```
 
 For a checkout pinned to a commit, fetch and select the next reviewed commit instead of pulling. Pass the original

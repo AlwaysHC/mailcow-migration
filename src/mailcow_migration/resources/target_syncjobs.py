@@ -15,11 +15,13 @@ for pid in os.listdir("/proc"):
         if not any(os.path.basename(arg) == b"imapsync" for arg in args[:2]):
             continue
         named = [arg.split(b"=", 1)[1] for arg in args if arg.startswith(b"--user2=")]
-        if b"--user2" in args:
-            named.append(args[args.index(b"--user2") + 1])
+        named.extend(args[index + 1] for index, arg in enumerate(args[:-1]) if arg == b"--user2")
         if len(named) != 1 or not named[0]:
             raise RuntimeError("Cannot identify running imapsync owner: PID " + pid)
-        user = named[0]
+        mailbox, separator, master = named[0].rpartition(b"*")
+        if separator and (not mailbox or not master):
+            raise RuntimeError("Invalid running imapsync master login: PID " + pid)
+        user = mailbox if separator else named[0]
         if user not in users:
             continue
         if request["stop"]:

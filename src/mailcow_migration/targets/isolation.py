@@ -236,10 +236,11 @@ class TargetIsolation:
             type(job.get("id")) not in (str, int)
             or str(job["id"]) == ""
             or not valid_switch(job.get("active"))
+            or not valid_switch(job.get("is_running"))
             for job in jobs
         ):
             raise MigrationError(
-                "Mailcow returned a batch sync job without a valid ID/activity flag; cannot save its original state"
+                "Mailcow returned a batch sync job without a valid ID/activity/running flag; cannot save its original state"
             )
         if len({str(job["id"]) for job in jobs}) != len(jobs):
             raise MigrationError("Mailcow returned duplicate sync-job identities")
@@ -520,7 +521,7 @@ class TargetIsolation:
                 raise MigrationError("Mailcow sessions remain for " + user["username"])
         if any(int(job["active"]) for job in jobs):
             raise MigrationError("A batch Mailcow sync job is active again")
-        if self.running_jobs():
+        if any(int(job["is_running"]) for job in jobs) or self.running_jobs():
             raise MigrationError(
                 "Mailcow sync jobs have not stopped; rerun pause to resume. No copy started"
             )

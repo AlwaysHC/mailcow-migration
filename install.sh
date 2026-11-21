@@ -110,9 +110,11 @@ cat <<'EOF'
 
 Next steps, in a root shell:
   mailcow-migrate configure --config /root/mailcow-in-progress/migration.json
-  mailcow-migrate check-config --config /root/mailcow-in-progress/migration.json
-  mailcow-migrate prepare --config /root/mailcow-in-progress/migration.json
+  mailcow-migrate migrate example.org --config /root/mailcow-in-progress/migration.json
 
-If configuration already exists, skip configure and run check-config and prepare.
-See docs/installation.md for credentials, guided preparation, updates and rollback.
+configure saves each answer and asks to continue or overwrite existing configuration.
+It asks before applying shared server changes.
+Replace example.org with the domain to migrate after setup succeeds.
+Use check --config FILE to verify the migration environment again after setup.
+See docs/installation.md for setup, updates and rollback.
 EOF

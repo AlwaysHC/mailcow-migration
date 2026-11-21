@@ -2,9 +2,9 @@
   "version": 1,
   "postfixadmin": {
     "source": "root@postfixadmin.example.org",
-    "source_mail_root": "/var/posta",
+    "source_mail_root": "",
     "mysql_option_file": "/root/migration-mysql.cnf",
-    "roundcube_directory": null,
+    "roundcube_directory": "",
     "ssh_config": null
   },
   "mailcow": {

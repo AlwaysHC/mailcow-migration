@@ -166,19 +166,6 @@ class GuidedMigration:
             )
 
     def review_roundcube(self) -> None:
-        if (
-            self.batch.source.roundcube_directory is None
-            and not (self.batch.directory / "roundcube-sessions/state.json").exists()
-        ):
-            directory = prompt_value(
-                "Absolute RoundCube installation directory on the source"
-            )
-            if run_roundcube_sessions(
-                self.configuration, self.file, directory=directory
-            ):
-                raise MigrationError(
-                    "Resolve the RoundCube proposal blockers before isolating the source"
-                )
         sessions = roundcube_sessions(self.batch, self.configuration)
         record = sessions.record()
         if record is not None and record["attempts"]:
