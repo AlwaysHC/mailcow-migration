@@ -35,9 +35,37 @@ from .targets.sieve_runtime import SieveRuntime
 from .targets.sogo import configuration_blockers, missing_custom_from
 from .targets.sogo_settings import verify_container_dates
 from .targets.sogo_values import custom_identity_configuration
-from .targets.storage import inspect_mail_storage
+from .targets.storage import MailStorage, inspect_mail_storage
 from .transfers import TransferContext, require_mailcow_host
 from .webmail import run_webmail
+
+
+def mail_capacity(
+    usage: Optional[list],
+    transfer: Optional[Mapping[str, Any]],
+    storage: MailStorage,
+    block_size: int,
+    free: int,
+) -> Mapping[str, str]:
+    if usage is None:
+        return {"status": "manual", "detail": f"{free} available bytes. Fixed-quota planning requires operator capacity review."}
+    if transfer is None or transfer["storage"] != storage.document() or any(row["status"] != "verified" for row in transfer["mailboxes"]):
+        return {"status": "blocked", "detail": "A verified append inventory for the current mail volume is required to estimate remaining storage."}
+    measured = {row["username"]: row for row in usage}
+    if len(measured) != len(usage) or measured.keys() != {row["username"] for row in transfer["mailboxes"]}:
+        return {"status": "blocked", "detail": "Measured source mailboxes differ from the live transfer inventory."}
+    required = 0
+    for mailbox in transfer["mailboxes"]:
+        row = measured[mailbox["username"]]
+        remaining = mailbox["missing_bytes"] + mailbox["missing_entries"] * block_size
+        if mailbox["creation_required"]:
+            planned = max(row["upperBoundBytes"], row.get("storedBytes") or 0) + row["messages"] * block_size
+            remaining = max(remaining, planned)
+        required += remaining
+    return {
+        "status": "blocked" if required > free else "passed",
+        "detail": f"{free} available bytes; {required} estimated remaining bytes including block allowance. Review growth and metadata.",
+    }
 
 
 def assess_batch(
@@ -107,7 +135,8 @@ def assess_batch(
                 lambda: validate_plan_inventory(batch.plan, source.inventory),
             )
         target = MailcowTarget(configuration.mailcow)
-        if source is not None and phase == "before" and not batch.plan["blockers"]:
+        transfer = None
+        if source is not None and phase in ("before", "staged") and not batch.plan["blockers"]:
             transfer = check(
                 "live-transfer-preview",
                 lambda: transfer_assessment(
@@ -132,29 +161,7 @@ def assess_batch(
             free = shutil.disk_usage(storage.root).free
             filesystem = os.statvfs(storage.root)
             usage = batch.plan.get("sourceUsage", {}).get("mailboxes")
-            if isinstance(usage, list):
-                required = sum(
-                    max(row["upperBoundBytes"], row.get("storedBytes") or 0)
-                    + row["messages"] * filesystem.f_frsize
-                    for row in usage
-                )
-                detail = "{} available bytes; {} estimated message bytes including block allowance. Review growth and metadata."
-                checks.append(
-                    {
-                        "id": "storage-capacity",
-                        "status": "blocked" if required > free else "passed",
-                        "detail": detail.format(free, required),
-                    }
-                )
-            else:
-                detail = "{} available bytes; fixed-quota planning has no measured source size. Operator capacity review is required."
-                checks.append(
-                    {
-                        "id": "storage-capacity",
-                        "status": "manual",
-                        "detail": detail.format(free),
-                    }
-                )
+            checks.append({"id": "storage-capacity", **mail_capacity(usage, transfer, storage, filesystem.f_frsize, free)})
             detail = "{} available inodes; review source folder/message counts and concurrent target growth."
             checks.append(
                 {

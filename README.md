@@ -357,10 +357,11 @@ the receiver's rsync options are checked independently of the source sender opti
 required on the sender. Normal measured planning also verifies current source Maildirs and binds their location to the source
 used for quota calculation. Fixed-quota planning and plans with source mapping blockers defer source transfer checks.
 
-For existing target Maildirs, a checksum dry run checks append compatibility with the transfer exclusions for Dovecot indexes,
+For each mailbox, a checksum dry run inventories the remaining transfer with exclusions for Dovecot indexes,
 `maildirsize` and temporary messages. Different existing contents or file types, symlinks, unsupported paths and message filename
 IDs found under another folder or flag name are blockers. Dovecot UID/keyword metadata conflicts require a mailbox-aware merge.
-Missing target directories are reported for later creation. No mailbox directories or messages are created, replaced or removed.
+Missing target directories are reported for later creation. The capacity assessment counts missing files and directory entries,
+including a block allowance. A new Maildir also retains its measured planning estimate as a minimum.
 These comparisons can take time on populated mailboxes; inventories are kept in private temporary files and removed after inspection.
 
 The configured policy supplies administrator names and batch-only ALL grants, explicitly reviewed administrator merges,
@@ -650,15 +651,14 @@ mailcow-migrate mail --config migration.json --plan /root/mailcow-in-progress/pl
 `--writers-stopped` is required for preview and apply. Supply it only after stopping batch writes, submission and account
 administration on both servers. The command rechecks the existing login, delivery, queue, session and detected-writer controls;
 custom writers hidden behind scripts still require operator action. PostfixAdmin SMTP authentication and session draining are also checked.
-Resolve saved blocking
-findings first. Plesk copying remains unavailable until its isolation adapter is implemented.
+Resolve saved blocking findings first. Plesk copying requires a completed source isolation receipt.
 
 The command requires matching completed account receipts, inactive target accounts and a completed target pause, with no
 uncertain account request or activation started. It verifies the account inventory and source domain/mailbox inventory,
 resolves the current mail volume and vmail ownership, and probes sender/receiver rsync capabilities. Source host/root must
 match quota measurement and any previous transfer. All source Maildirs are checked before the first copy.
 
-Add `--apply` to copy missing files. Mailboxes with existing target data first pass a checksum dry run; content/type conflicts,
+Add `--apply` to copy missing files. Each mailbox first passes a checksum dry run. Content/type conflicts,
 target symlinks and message IDs found under another target path stop continuation. Copying uses
 `--ignore-existing`, preserves hard links and safe-link handling, and excludes Dovecot indexes, `maildirsize` and temporary
 message files. Required target directories are created with vmail ownership. A read-only count precedes each rsync pass;
@@ -670,8 +670,10 @@ mail; rerun the same command to repeat live checks and append only missing files
 leaving target mail and transfer receipts unchanged. If the mailbox parent is absent, preview reports the required directory
 creation without attempting a copy into a nonexistent parent.
 
-Use `--apply --final` for the final mail pass. Only successful copying followed by live isolation, source inventory and target
-storage checks records `mailPending: false` and `finalMail: true`. An ordinary applied pass records `finalMail: false`.
+Use `--apply --final` for the final mail pass. After copying, the command compares each included source file with the target by
+checksum and rechecks isolation, source inventory and target storage. Success records `mailChecksumsVerified: true`,
+`mailPending: false` and `finalMail: true`. An ordinary applied pass records `finalMail: false`.
+Before starting activation, batches with older final mail receipts must repeat the final pass under isolation.
 No Sieve completion is inferred from mail copying. Disk capacity, fixed-quota suitability, complete account-setting drift
 verification, the separate Sieve step, quota recalculation, activation and cutover remain separate requirements. Keep both servers
 isolated after copying; a final mail receipt does not authorize access restoration or mark the migration complete.
@@ -690,7 +692,8 @@ completion manifest, file hashes, domain/source identity and saved export ID. Mi
 inactive scripts and unsupported PostfixAdmin filter syntax block installation before target writes.
 
 Personal scripts are selected when present, including empty scripts. Add `--use-default-sieve` to select the exported default
-for mailboxes without a personal script. Without that flag, those mailboxes use Mailcow's default filtering and their personal
+for mailboxes without a personal script. The guided workflow offers this choice only when the export contains a default.
+Plesk exports contain personal scripts only. Without that flag, mailboxes without a personal script use Mailcow's default filtering and their personal
 script/binary must be absent. The selection does not change Mailcow's shared default script.
 
 Conflicting target scripts, or stale compiled files when no source script is selected, block the step unless

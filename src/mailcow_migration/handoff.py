@@ -19,13 +19,13 @@ from .core.storage import (
     write_private_json,
 )
 from .handoff_state import handoff_identity, require_handoff_ready
+from .plans.domain import delivery_domains
 from .plans.saved import SavedPlan, load_saved_plan
 from .signing import signing_choice, verify_signing_dns
 from .source_forwarding import verify_source_forwarding
 from .source_selection import record_target_addresses
 from .sources import SourceKind
 from .sources.inventory import inspect_source
-from .sources.plesk_isolation import PleskIsolation
 from .sources.submission import SourceSubmission
 from .targets.mailcow import MailcowTarget
 from .transfers import require_mailcow_host
@@ -257,6 +257,7 @@ def run_handoff(
                     "Recorded completion evidence changed; retain and reconcile the original report"
                 )
         before_file = local_path(batch.directory / "dns-before.json")
+        domains = delivery_domains(batch.plan)
         if not before_file.exists():
             records = [
                 {
@@ -264,7 +265,7 @@ def run_handoff(
                     "server": server,
                     "records": [asdict(row) for row in query(domain, "MX", server)],
                 }
-                for domain in batch.plan["domains"]
+                for domain in domains
                 for server in nameservers(domain)
             ]
             write_private_json(
@@ -294,10 +295,8 @@ def run_handoff(
             )
         record_target_addresses(batch, configuration)
         choice = signing_choice(batch, configuration)
-        print(
-            "DNS handoff: point all batch MX destinations directly at Mailcow A/AAAA addresses: "
-            + ", ".join(addresses)
-        )
+        if domains:
+            print("DNS handoff: point MX for " + ", ".join(domains) + " directly at Mailcow addresses: " + ", ".join(addresses))
         print(
             "Keep one SPF policy with explicit Mailcow IP entries, preserve its other mechanisms, and publish the chosen DKIM record."
         )
@@ -331,7 +330,7 @@ def run_handoff(
         endpoints = read_json(batch.directory / "mail-certificate.json", private=True)[
             "endpoints"
         ]
-        mx = tuple(source_mx(domain) for domain in batch.plan["domains"])
+        mx = tuple(source_mx(domain) for domain in domains)
         if any(address not in addresses for evidence in mx for address in evidence.ips):
             raise MigrationError(
                 "Every authoritative MX destination must point only to the verified Mailcow addresses"
@@ -348,9 +347,7 @@ def run_handoff(
         )
         signing = verify_signing_dns(batch, configuration, addresses)
         forwarding = verify_source_forwarding(batch, configuration)
-        if batch.source.kind is SourceKind.PLESK:
-            PleskIsolation(batch, configuration).check(webmail=True)
-        else:
+        if batch.source.kind is not SourceKind.PLESK:
             SourceSubmission(batch, configuration).check()
         mailboxes = mailbox_readability(batch, configuration, target)
         queues = inspect_handoff_queues(batch, configuration, target)

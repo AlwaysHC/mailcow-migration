@@ -401,7 +401,7 @@ def verify_signing_dns(
     missing = missing_spf_entries(policies[0], addresses)
     if missing:
         raise MigrationError(
-            "Add these explicit Mailcow IP entries to the existing SPF policy before its all term: "
+            "Place passing Mailcow IP entries before any matching non-pass mechanism and before all: "
             + " ".join(missing)
         )
     target = MailcowTarget(configuration.mailcow)

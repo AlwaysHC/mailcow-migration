@@ -25,6 +25,7 @@ from .plesk_common import (
     read,
     run_request,
     save,
+    service_overrides,
     write,
 )
 from .plesk_forwarding import (
@@ -40,17 +41,14 @@ from .plesk_forwarding import (
 
 def overrides():
     result = {}
-    for line in command(["postconf", "-P"]).splitlines():
-        key, separator, value = line.partition("=")
-        if not separator:
-            raise RuntimeError("Cannot parse Postfix master.cf overrides")
+    for key, value in service_overrides():
         name = key.rsplit("/", 1)[-1]
         if name == "transport_maps":
             raise RuntimeError(
                 "A Postfix service overrides transport_maps; a delivery adapter is required"
             )
         if name in PREFIXES:
-            result[key] = value.strip()
+            result[key] = value
     return result
 
 
@@ -190,9 +188,10 @@ def initial_state():
 
 def verify_configuration(state, changing=False):
     pending = bool(state["pending"]) and changing
+    forwarding = pending and state["pending"][1] == "forward"
     active = bool(state["batches"])
     allowed = [state["managedDovecot"] if active else state["originalDovecot"]]
-    if pending:
+    if pending and not forwarding:
         allowed.extend([state["originalDovecot"], state["managedDovecot"]])
     if read(DOVECOT) not in allowed:
         raise RuntimeError(
@@ -209,7 +208,7 @@ def verify_configuration(state, changing=False):
     for name, original in {**state["postfix"], **state["master"]}.items():
         actual = actual_master[name] if "/" in name else postconf(name)
         allowed = [managed(name, original) if active else original]
-        if pending:
+        if pending and (not forwarding or name in ("virtual_alias_maps", "recipient_canonical_maps")):
             allowed.extend([original, managed(name, original)])
         if actual not in allowed:
             raise RuntimeError(f"Postfix isolation setting changed: {name}")
@@ -560,6 +559,10 @@ def forward_source(state, batch, request):
     check_writers(batch)
     smtp_probe(forwarding["ip"], forwarding_probes(forwarding))
     queue = forwarding_queue(current, forwarding)
+    complete = bool(existing and existing.get("ready") and not pending)
+    if complete:
+        verify_forwarding_maps(current, forwarding)
+        smtp_probe("127.0.0.1", forwarding_probes(forwarding))
     fingerprint = hashlib.sha256(
         json.dumps(
             [state, configuration, original_aliases, forwarding], sort_keys=True
@@ -570,7 +573,7 @@ def forward_source(state, batch, request):
         "fingerprint": fingerprint,
         "route": forwarding["route"],
         "queue": queue,
-        "complete": bool(existing and existing.get("ready") and not pending),
+        "complete": complete,
     }
     if request["action"] == "forward-preview":
         return report

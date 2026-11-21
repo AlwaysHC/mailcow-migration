@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from uuid import uuid4
 
 from .configuration import Configuration
@@ -11,9 +11,10 @@ from .core.state import Workspace
 from .core.storage import local_path, private_directory
 from .plans.saved import load_saved_plan, validate_plan_inventory
 from .plans.transfer import (
-    MAILDIR_CHECK,
+    AppendInventory,
     SENDER_OPTIONS,
     assert_append_compatible,
+    check_source_maildir,
     receiver_options,
     rsync_capabilities,
     target_maildir,
@@ -36,6 +37,7 @@ class MailTransfer(TransferContext):
                 state,
                 mailPending=True,
                 finalMail=False,
+                mailChecksumsVerified=False,
                 mailStage="preflight",
                 mailbox=None,
             )
@@ -116,35 +118,26 @@ class MailTransfer(TransferContext):
                 )
                 for row in self.batch.plan["mailboxes"]
             )
-            for username, path, destination in copies:
-                connection.run(
-                    (
-                        "sh",
-                        "-c",
-                        MAILDIR_CHECK,
-                        "maildir-check",
-                        str(path),
-                        *(str(path / name) for name in ("cur", "new", "tmp")),
-                    ),
-                    diagnostic_file=directory
-                    / ("source-maildir-" + uuid4().hex + ".txt"),
-                )
-                print(username + ": source Maildir checked.")
-            for index, (username, path, destination) in enumerate(copies, 1):
-                print(
-                    f"Mailbox {index}/{len(copies)}: {username}; checking append compatibility.",
-                    flush=True,
-                )
-                local_path(destination)
-                remote = identity["host"] + ":" + str(path) + "/"
-                assert_append_compatible(
-                    remote,
-                    destination,
+
+            def inventory(path: PurePosixPath, destination: Path) -> AppendInventory:
+                return assert_append_compatible(
+                    identity["host"] + ":" + str(path) + "/",
+                    local_path(destination),
                     options,
                     ssh_options,
                     directory,
                     directory / ("append-check-" + uuid4().hex + ".txt"),
                 )
+
+            def check_source(path: PurePosixPath) -> None:
+                check_source_maildir(connection, path, directory / ("source-maildir-" + uuid4().hex + ".txt"))
+
+            for username, path, _ in copies:
+                check_source(path)
+                print(username + ": source Maildir checked.")
+            for index, (username, path, destination) in enumerate(copies, 1):
+                print(f"Mailbox {index}/{len(copies)}: {username}; checking append compatibility.", flush=True)
+                inventory(path, destination)
                 if apply:
                     state = self.save(state, mailStage="copy mail", mailbox=username)
                     local_path(destination)
@@ -169,7 +162,7 @@ class MailTransfer(TransferContext):
                 else:
                     local_path(destination)
                     append_maildir(
-                        remote,
+                        identity["host"] + ":" + str(path) + "/",
                         destination,
                         options,
                         ssh_options,
@@ -185,6 +178,12 @@ class MailTransfer(TransferContext):
                     )
                 )
             if apply:
+                state = self.save(state, mailStage="verify copied mail", mailbox=None)
+                for username, path, destination in copies:
+                    check_source(path)
+                    remaining = inventory(path, destination)
+                    if not destination.is_dir() or remaining.missing_entries:
+                        raise MigrationError(f"{username}: target Maildir is incomplete after append; retain the journal and retry")
                 state = self.save(state, mailStage="verify isolation", mailbox=None)
                 self.check_isolation(target)
                 current = inspect_source(self.batch.source, self.batch.plan["domain"])
@@ -203,7 +202,7 @@ class MailTransfer(TransferContext):
                         "Target mail volume or vmail ownership changed during copying; the final pass was not recorded"
                     )
                 self.save(
-                    state, mailPending=False, finalMail=final, mailStage="complete"
+                    state, mailPending=False, finalMail=final, mailChecksumsVerified=True, mailStage="complete"
                 )
                 print(
                     "Mail append completed; final pass recorded: {}.".format(

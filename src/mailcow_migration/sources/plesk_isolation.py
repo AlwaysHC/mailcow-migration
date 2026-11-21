@@ -81,12 +81,15 @@ class PleskIsolation:
             )
         return result
 
-    def check(self, *, webmail: bool = False) -> None:
+    def require_freeze_receipt(self) -> None:
         state = self.state()
         if state is None or state["action"] != "freeze" or not state["complete"]:
             raise MigrationError(
                 "Complete Plesk source isolation and retain its journal before continuing"
             )
+
+    def check(self, *, webmail: bool = False) -> None:
+        self.require_freeze_receipt()
         result = self.request("check-webmail" if webmail else "check")
         if not result["blocked"]:
             raise MigrationError("Plesk no longer reports this batch isolated")

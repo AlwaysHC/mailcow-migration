@@ -13,6 +13,7 @@ from .plesk_common import (
     invoke,
     managed,
     postconf,
+    service_overrides,
 )
 
 FORWARD_SETTINGS = (
@@ -62,10 +63,7 @@ def forwarding_configuration(state):
         raise RuntimeError(
             "Global no_address_mappings would bypass migration recipient maps"
         )
-    for line in command(["postconf", "-P"]).splitlines():
-        key, separator, value = line.partition("=")
-        if not separator:
-            raise RuntimeError("Cannot parse Postfix service overrides")
+    for key, value in service_overrides():
         name = key.rsplit("/", 1)[-1]
         if name in (*configuration, "virtual_alias_maps"):
             raise RuntimeError(
@@ -266,7 +264,7 @@ def forwarding_queue(batch, forwarding):
             )
             if override and override[1].strip():
                 filters.append(line)
-        if not any(map(in_batch, recipients)):
+        if not expanded and not any(map(in_batch, recipients)):
             continue
         problem = (
             "old alias expansion: " + ", ".join(expanded)

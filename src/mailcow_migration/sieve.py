@@ -61,6 +61,10 @@ class SieveTransfer(TransferContext):
     ) -> None:
         self.before_transfer()
         state = self.state()
+        evidence = load_plan_export(self.configuration, self.batch, exported)
+        source = load_sieve_evidence(self.batch.plan, evidence)
+        if use_default and source.default_sieve is None:
+            raise MigrationError("This source export has no default Sieve script; omit --use-default-sieve")
         if apply:
             state = self.save(
                 state,
@@ -74,8 +78,6 @@ class SieveTransfer(TransferContext):
             )
         directory = local_path(self.batch.directory / "sieve-transfer")
         try:
-            evidence = load_plan_export(self.configuration, self.batch, exported)
-            source = load_sieve_evidence(self.batch.plan, evidence)
             blockers = sieve_inventory_blockers(source)
             for row in (
                 self.batch.plan["mailboxes"]

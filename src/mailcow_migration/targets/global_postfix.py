@@ -5,7 +5,7 @@ from typing import Any, Mapping, Sequence
 from uuid import uuid4
 
 from ..core.errors import MigrationError
-from ..core.postfix import postfix_settings
+from ..core.postfix import managed_section, postfix_settings, update_section
 from ..core.state import require_identity
 from ..core.storage import (
     json_fingerprint,
@@ -99,25 +99,9 @@ class GlobalPostfix:
             )
         extra_file = conf / "extra.cf"
         extra = optional_text(extra_file) or ""
-        start, finish = extra.find(BEGIN), extra.find(END)
-        if (
-            (start < 0) != (finish < 0)
-            or start >= 0
-            and (
-                finish < start
-                or extra.find(BEGIN, start + 1) >= 0
-                or extra.find(END, finish + 1) >= 0
-            )
-        ):
-            raise MigrationError("Malformed shared migration block in extra.cf")
-        outside = (
-            extra
-            if start < 0
-            else extra[:start] + re.sub(r"^\r?\n", "", extra[finish + len(END) :])
-        )
-        existing = (
-            {} if start < 0 else postfix_settings(extra[start + len(BEGIN) : finish])
-        )
+        section = managed_section(extra, BEGIN, END)
+        outside = extra if section is None else extra[:section.start()] + extra[section.end():]
+        existing = {} if section is None else postfix_settings(section[1])
         desired, files = dict(existing), []
         whitelist = tuple(
             row for row in rows if row.get("kind") == "postscreen-whitelist"
@@ -237,19 +221,13 @@ class GlobalPostfix:
         if set(desired) - self.previous.keys():
             raise MigrationError("Shared migration block contains unsupported settings")
         if desired:
+            block = "\n".join((BEGIN, *(f"{key} = {value}" for key, value in desired.items()), END))
             files.append(
                 {
                     "file": extra_file,
                     "map": None,
                     "shared": True,
-                    "text": outside.rstrip()
-                    + "\n"
-                    + BEGIN
-                    + "\n"
-                    + "\n".join(key + " = " + value for key, value in desired.items())
-                    + "\n"
-                    + END
-                    + "\n",
+                    "text": update_section(extra, section, block),
                 }
             )
         self.desired = desired

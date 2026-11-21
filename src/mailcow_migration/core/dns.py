@@ -119,7 +119,9 @@ def nameservers(name: str) -> Tuple[str, ...]:
     zone = record_name(name)
     while "." in zone:
         records = query(zone, "NS", allow_missing=True)
-        if records:
+        if len(records) == 1 and records[0].kind == "CNAME" and len(records[0].values) == 1:
+            record_name(records[0].values[0].lower().rstrip("."))
+        elif records:
             if any(
                 record.kind != "NS" or len(record.values) != 1 for record in records
             ):

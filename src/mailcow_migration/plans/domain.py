@@ -36,6 +36,18 @@ def active(value: Any) -> int:
     return int(number(value) == 1)
 
 
+def active_alias_domains(plan: Mapping[str, Any]) -> tuple:
+    return tuple(sorted(
+        row["alias_domain"]
+        for row in plan["aliasDomains"]
+        if row["target_domain"] == plan["domain"] and active(row["active"])
+    ))
+
+
+def delivery_domains(plan: Mapping[str, Any]) -> tuple:
+    return (plan["domain"], *active_alias_domains(plan)) if active(plan["domainActive"]) else ()
+
+
 def address_domain(value: str) -> str:
     return value.rsplit("@", 1)[-1]
 

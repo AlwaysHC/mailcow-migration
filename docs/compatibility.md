@@ -324,9 +324,11 @@ Automatic certificate setup needs the OpenSSL CLI for independent hostname and e
 hostname and TLS 1.2 or newer on every address. See the [OpenSSL x509 options](https://docs.openssl.org/3.0/man1/openssl-x509/).
 Certificate work preserves config ownership, other SAN/server names, custom-certificate ownership and all recorded backups.
 Two successful endpoint passes at least ten seconds apart are required; an ACME status message alone is insufficient.
-SPF verification requires explicit passing ip4/ip6 coverage before the all term and does not expand includes/a/mx mechanisms.
+SPF verification requires the first matching explicit IP mechanism for each Mailcow address to pass before the all term.
+A preceding non-pass DNS mechanism requires review because the verifier does not expand it.
 DKIM TXT checks reject malformed/revoked keys; provider CNAME targets remain pinned while their published keys may rotate.
-Handoff records first DNS observations/TTLs, checks all authoritative MX destinations, readable mailbox counters and both queues.
+Handoff records initial DNS observations and TTLs for active delivery domains. It checks their authoritative MX destinations,
+readable mailbox counters and both queues.
 Completion additionally requires explicit operator delivery/client/permission and received-message authentication confirmations.
 The source SSH endpoint must remain stable through DNS changes. No automatic DNS edits or general post-cutover rollback are provided.
 

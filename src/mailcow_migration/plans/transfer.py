@@ -1,13 +1,15 @@
 import os
 import re
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from ..core.commands import CommandResult, run_command
 from ..core.errors import MigrationError
-from ..core.storage import local_path
+from ..core.ssh import SshConnection
+from ..core.storage import local_path, private_directory
 from ..sources.inventory import SourceInspection
 from ..sources.maildirs import mailbox_path, source_identity
 from ..targets.mailcow import MailcowTarget
@@ -30,13 +32,28 @@ EXCLUSIONS = (
     "--exclude=**/tmp/*",
 )
 MAILDIR_CHECK = (
-    'for directory in "$@"; do\n'
+    'for directory in "$1" "$1/cur" "$1/new" "$1/tmp"; do\n'
     '  test -d "$directory" && test ! -L "$directory" || {\n'
     '    printf "Missing or symlinked source Maildir: %s\\n" "$directory" >&2\n'
     "    exit 1\n"
     "  }\n"
     "done\n"
+    'cd "$1" || exit 1\n'
+    'unsupported=$(find . \\( -name "dovecot.index*" -o -name "dovecot.list.index*" -o -name maildirsize -o -path "*/tmp/*" \\) -prune '
+    '-o ! -type d ! -type f -printf x -quit) || exit 1\n'
+    'test -z "$unsupported" || { echo "Source Maildir contains a symlink or special file" >&2; exit 1; }\n'
 )
+
+
+def check_source_maildir(connection: SshConnection, path: PurePosixPath, diagnostics: Path) -> None:
+    connection.run(("sh", "-c", MAILDIR_CHECK, "maildir-check", str(path)), timeout=86400, diagnostic_file=diagnostics)
+
+
+@dataclass(frozen=True)
+class AppendInventory:
+    entries: int
+    missing_entries: int
+    missing_bytes: int
 
 
 def receiver_options(storage: MailStorage) -> Tuple[str, ...]:
@@ -89,31 +106,33 @@ def target_messages(directory: Path) -> Mapping[str, list]:
                     raise MigrationError(f"Append blocked by target symlink: {file}")
                 if entry.is_dir(follow_symlinks=False):
                     pending.append(file)
-                else:
+                elif entry.is_file(follow_symlinks=False):
                     identifier = maildir_message_id(
                         file.relative_to(directory).as_posix()
                     )
                     if identifier:
                         messages.setdefault(identifier, []).append(str(file))
+                else:
+                    raise MigrationError(f"Append blocked by target special file: {file}")
     return messages
 
 
 def inspect_append_inventory(
     directory: Path, inventory: Path, messages: Mapping[str, list]
-) -> int:
-    count = 0
+) -> AppendInventory:
+    count = missing_entries = missing_bytes = 0
     try:
         with inventory.open("r", encoding="utf-8", newline="") as stream:
             for raw in stream:
                 line = raw.rstrip("\n")
                 if not line:
                     continue
-                match = re.fullmatch(r"APPEND\|([^\r\n]{11})\|([^\r\n]+)", line)
+                match = re.fullmatch(r"APPEND\|([^\r\n]{11})\|([0-9]+)\|([^\r\n]+)", line)
                 if match is None:
                     raise MigrationError(
                         "Cannot interpret append inventory; contents omitted"
                     )
-                item, relative = match[1], match[2]
+                item, length, relative = match[1], int(match[2]), match[3]
                 if (
                     re.search(r"\\#[0-7]{3}", relative)
                     or PurePosixPath(relative).is_absolute()
@@ -148,12 +167,15 @@ def inspect_append_inventory(
                                 relative, ", ".join(alternatives)
                             )
                         )
+                if not exists:
+                    missing_entries += 1
+                    missing_bytes += length if item[1] == "f" else 0
                 count += 1
     except UnicodeError as error:
         raise MigrationError(
             "Append inventory is not valid UTF-8; contents omitted"
         ) from error
-    return count
+    return AppendInventory(count, missing_entries, missing_bytes)
 
 
 def assert_append_compatible(
@@ -163,25 +185,32 @@ def assert_append_compatible(
     ssh_options: Sequence[str],
     directory: Path,
     diagnostics: Path,
-) -> int:
-    if not destination.exists():
-        return 0
-    messages = target_messages(destination)
+) -> AppendInventory:
+    present = destination.is_dir()
+    if not present and destination.exists():
+        raise MigrationError(f"Target Maildir is not a directory: {destination}")
+    messages = target_messages(destination) if present else {}
     with tempfile.TemporaryDirectory(
-        prefix="append-check-", dir=str(directory)
+        prefix="append-check-", dir=str(private_directory(directory))
     ) as temporary:
         inventory = Path(temporary) / "inventory"
+        receiver = destination
+        if not present:
+            receiver = Path(temporary) / "empty"
+            receiver.mkdir()
         run_command(
             (
                 "rsync",
                 *options,
+                "--no-hard-links",
+                "--8-bit-output",
                 "--dry-run",
                 "--checksum",
-                "--out-format=APPEND|%i|%n",
+                "--out-format=APPEND|%i|%l|%n",
                 *ssh_options,
                 "--",
                 source_path,
-                str(destination) + "/",
+                str(receiver) + "/",
             ),
             timeout=86400,
             label="Read-only append compatibility inventory",
@@ -311,18 +340,8 @@ def transfer_assessment(
                 }
             )
             if source_checks:
-                source.connection.ssh.run(
-                    (
-                        "sh",
-                        "-c",
-                        MAILDIR_CHECK,
-                        "maildir-check",
-                        str(path),
-                        *(str(path / name) for name in ("cur", "new", "tmp")),
-                    ),
-                    diagnostic_file=directory / f"source-maildir-{index + 1}.txt",
-                )
-                entries = assert_append_compatible(
+                check_source_maildir(source.connection.ssh, path, directory / f"source-maildir-{index + 1}.txt")
+                inventory = assert_append_compatible(
                     remote,
                     destination,
                     options,
@@ -333,10 +352,10 @@ def transfer_assessment(
                 current.update(
                     {
                         "status": "verified",
-                        "inventory_entries": entries,
-                        "append_check": "not-needed"
-                        if current["creation_required"]
-                        else "verified",
+                        "inventory_entries": inventory.entries,
+                        "missing_entries": inventory.missing_entries,
+                        "missing_bytes": inventory.missing_bytes,
+                        "append_check": "verified",
                     }
                 )
                 checks.append(

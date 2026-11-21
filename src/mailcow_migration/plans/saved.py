@@ -9,7 +9,7 @@ from ..core.storage import json_fingerprint, local_path, read_json
 from ..sources import SourceConnection, configured_sources
 from ..sources.inventory import DomainInventory
 from .catalog import register_batch
-from .domain import active, valid_domain
+from .domain import active_alias_domains, valid_domain
 from .settings_policy import load_policy
 
 
@@ -38,16 +38,11 @@ def validate_plan_inventory(
         for row in plan["mailboxes"]
         if row["payload"]["domain"] == plan["domain"]
     )
-    aliases = sorted(
-        row["alias_domain"]
-        for row in plan["aliasDomains"]
-        if row["target_domain"] == plan["domain"] and active(row["active"])
-    )
     if (
         not inventory.present
         or inventory.primary != plan["domain"]
         or tuple(mailboxes) != inventory.mailboxes
-        or tuple(aliases) != inventory.aliases
+        or active_alias_domains(plan) != inventory.aliases
         or bool(plan["domainActive"]) != inventory.active
     ):
         raise MigrationError(

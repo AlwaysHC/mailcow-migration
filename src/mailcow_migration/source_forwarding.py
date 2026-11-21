@@ -9,6 +9,7 @@ from .core.errors import ConfigurationError, MigrationError
 from .core.state import Workspace, require_identity
 from .core.storage import local_path, read_json, write_private_json
 from .handoff_state import handoff_identity, require_handoff_ready
+from .plans.domain import delivery_domains
 from .plans.saved import SavedPlan, load_saved_plan
 from .sources import SourceKind
 from .sources.delivery import SourceDelivery
@@ -42,17 +43,9 @@ def forwarding_address(value: str) -> str:
 
 def forwarding_policy(plan: Mapping[str, Any], address: str) -> Mapping[str, Any]:
     policies = []
+    enabled_domains = set(delivery_domains(plan))
     for domain in plan["domains"]:
-        enabled = bool(
-            plan["domainActive"]
-            and (
-                domain == plan["domain"]
-                or any(
-                    row["alias_domain"] == domain and row["active"]
-                    for row in plan["aliasDomains"]
-                )
-            )
-        )
+        enabled = domain in enabled_domains
         recipients, rejected = [], []
         for row in plan["aliases"]:
             if row["address"].startswith("@"):
@@ -100,7 +93,10 @@ def forwarding_request(
             "Forwarding writes require the current preview fingerprint"
         )
     if batch.source.kind is SourceKind.PLESK:
-        return PleskIsolation(batch, configuration).request(
+        isolation = PleskIsolation(batch, configuration)
+        isolation.require_freeze_receipt()
+        isolation.check_source()
+        return isolation.request(
             "forward" if apply else "forward-preview",
             forwarding=forwarding_policy(batch.plan, address),
             **({"fingerprint": fingerprint} if apply else {}),
@@ -163,9 +159,7 @@ def run_source_forwarding(
             raise MigrationError(
                 "The forwarding destination belongs to the source server"
             )
-        if batch.source.kind is SourceKind.PLESK:
-            PleskIsolation(batch, configuration).check(webmail=True)
-        else:
+        if batch.source.kind is not SourceKind.PLESK:
             SourceSubmission(batch, configuration).check()
         journal = local_path(batch.directory / "source-forwarding.json")
         identity = {

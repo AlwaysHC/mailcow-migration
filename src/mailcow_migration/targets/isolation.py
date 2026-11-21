@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from ..core.commands import CommandResult
 from ..core.errors import MigrationError
+from ..core.postfix import managed_section, update_section
 from ..core.state import require_identity
 from ..core.storage import (
     decode_json,
@@ -42,7 +43,6 @@ ACCESS = (
 )
 HOLD = "error:4.3.2 Domain migration in progress"
 BEGIN, END = "# BEGIN migration delivery holds", "# END migration delivery holds"
-DELIVERY_BLOCK = re.compile(re.escape(BEGIN) + r"\n[\s\S]*?" + re.escape(END) + r"\n?")
 HOLD_LOOKUP = re.compile(r"regexp:/opt/postfix/conf/migration-hold-[a-f0-9]+")
 
 
@@ -346,27 +346,16 @@ class TargetIsolation:
             )
         )
         extra = optional_text(self.extra_file) or ""
-        blocks = tuple(DELIVERY_BLOCK.finditer(extra))
-        if len(blocks) > 1 or (BEGIN in extra or END in extra) and not blocks:
-            raise MigrationError(f"Malformed managed delivery block: {self.extra_file}")
-        if blocks:
+        section = managed_section(extra, BEGIN, END)
+        if section is not None:
             recorded = re.search(
-                r"^transport_maps\s*=\s*(.*)$", blocks[0][0], re.MULTILINE
+                r"^transport_maps\s*=\s*(.*)$", section[1], re.MULTILINE
             )
             if not recorded or recorded[1] != chain:
                 raise MigrationError(
                     "Effective target transport_maps differs from the persistent migration block"
                 )
-        following = (
-            DELIVERY_BLOCK.sub("", extra).rstrip()
-            + "\n"
-            + BEGIN
-            + "\ntransport_maps = "
-            + desired
-            + "\n"
-            + END
-            + "\n"
-        )
+        following = update_section(extra, section, f"{BEGIN}\ntransport_maps = {desired}\n{END}")
         return {"before": extra, "after": following, "chain": chain, "desired": desired}
 
     def activate_route(self, change: Mapping[str, str]) -> None:

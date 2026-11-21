@@ -6,6 +6,7 @@ from .accounts import (
     account_journal,
     account_mutations,
     account_requests,
+    activation_started,
     validate_account_journal,
     verify_account_inventory,
 )
@@ -91,7 +92,9 @@ def run_activation(
             state, staging, operations if "activationRequests" in state else ()
         )
         verify_account_inventory(batch.plan, inventory, recovery, state)
-        context.final_state()
+        transfers = context.final_state()
+        if batch.plan["mailboxes"] and not activation_started(state) and transfers.get("mailChecksumsVerified") is not True:
+            raise MigrationError("Repeat mail --apply --final under isolation to verify copied contents before starting activation")
         if state.get("activated"):
             print(
                 "Batch already activated; its account inventory matches the plan. Webmail import and release are separate."

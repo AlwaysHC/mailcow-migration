@@ -21,7 +21,9 @@ from .handoff_state import handoff_identity
 from .isolation import run_target_isolation
 from .mail import run_mail
 from .planning import run_plan
+from .plans.evidence import load_plan_export
 from .plans.saved import SavedPlan, load_saved_plan
+from .plans.sieve_evidence import load_sieve_evidence
 from .prefilters import run_prefilters
 from .quota import run_quota
 from .roundcube_sessions import run_roundcube_sessions
@@ -70,6 +72,12 @@ class GuidedMigration:
     def accounts(self) -> Mapping[str, Any]:
         return account_journal(self.batch, self.configuration).read()
 
+    def has_default_sieve(self) -> bool:
+        if self.batch.source.kind is SourceKind.PLESK:
+            return False
+        evidence = load_plan_export(self.configuration, self.batch, self.exported)
+        return load_sieve_evidence(self.batch.plan, evidence).default_sieve is not None
+
     def workflow(self) -> Mapping[str, Any]:
         identity = {
             "version": 1,
@@ -94,9 +102,14 @@ class GuidedMigration:
                 raise MigrationError(
                     "Invalid saved Sieve choices; retain the guided workflow journal"
                 )
+            if state["use_default_sieve"] and not activation_started(self.accounts()) and not self.has_default_sieve():
+                state = {**state, "use_default_sieve": False}
+                write_private_json(file, state, replace=True)
+                print("Corrected the saved Sieve choice because this source export has no default script.")
             return state
         use_default = (
-            choose(
+            self.has_default_sieve()
+            and choose(
                 "Use exported default Sieve for users without a personal script",
                 ("no", "yes"),
                 "no",

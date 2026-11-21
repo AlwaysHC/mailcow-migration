@@ -56,6 +56,15 @@ def command(arguments):
     return invoke(arguments).stdout
 
 
+def service_overrides():
+    for line in command(["postconf", "-P"]).splitlines():
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not separator or not re.fullmatch(r"[^/\s]+/[^/\s]+/[^/\s]+", key):
+            raise RuntimeError("Cannot parse Postfix master.cf overrides")
+        yield key, value.strip()
+
+
 def query(sql):
     xml = ET.fromstring(command(["plesk", "db", "--xml", "-e", sql]))
     return [

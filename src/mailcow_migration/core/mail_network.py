@@ -91,8 +91,15 @@ def missing_spf_entries(policy: str, addresses: Sequence[str]) -> Tuple[str, ...
     for term in policy.split()[1:]:
         if re.fullmatch(r"[+~?-]?all", term, re.IGNORECASE):
             break
-        match = re.fullmatch(r"\+?ip([46]):([^/]+)(?:/([0-9]+))?", term, re.IGNORECASE)
+        qualifier, mechanism = (term[0], term[1:]) if term[0] in "+-?~" else ("+", term)
+        if not mechanism or mechanism[0] in "+-?~":
+            raise MigrationError("Invalid SPF mechanism qualifier")
+        match = re.fullmatch(r"ip([46]):([^/]+)(?:/([0-9]+))?", mechanism, re.IGNORECASE)
         if match is None:
+            if re.match(r"ip[46](?:$|:|/)", mechanism, re.IGNORECASE):
+                raise MigrationError("Invalid explicit SPF IP entry")
+            if qualifier != "+" and re.match(r"(?:include|a|mx|ptr|exists)(?:$|:|/)", mechanism, re.IGNORECASE):
+                break
             continue
         try:
             address = ipaddress.ip_address(match[2])
@@ -104,14 +111,14 @@ def missing_spf_entries(policy: str, addresses: Sequence[str]) -> Tuple[str, ...
             raise MigrationError("Invalid explicit SPF IP entry") from error
         if "%" in match[2] or address.version != int(match[1]):
             raise MigrationError("Invalid SPF address family")
-        networks.append(network)
+        networks.append((network, qualifier == "+"))
     parsed = tuple(ipaddress.ip_address(address) for address in addresses)
     return tuple(
         f"ip{address.version}:{address}"
         for address in parsed
-        if not any(
-            address.version == network.version and address in network
-            for network in networks
+        if not next(
+            (passes for network, passes in networks if address.version == network.version and address in network),
+            False,
         )
     )
 
